@@ -48,11 +48,22 @@ pip install -r requirements.txt
 ```
 
 ### 2. Download market data
+Export your Alpha Vantage API key (insert the key provided to you for coursework) and fetch daily OHLCV data.
+```bash
+export ALPHAVANTAGE_API_KEY="<YOUR_ALPHA_VANTAGE_KEY>"
+# Optional: set the alternate variable name used in some notebooks/scripts.
+export ALPHA_VANTAGE_API_KEY="$ALPHAVANTAGE_API_KEY"
+```
+Then pull the required tickers. Alpha Vantage is the default provider with automatic fallbacks to Yahoo Finance for symbols the API does not cover (e.g. broad market indices beginning with `^`).
 Fetch daily OHLCV data and save to `data/raw/`.
 ```bash
 python -m src.data.download_data \
     --tickers AAPL EURUSD=X XAUUSD=X ^GSPC \
     --start 2013-01-01 \
+    --end 2023-12-31 \
+    --provider alpha_vantage
+```
+Optional arguments allow changing the interval, retry policy, output format, and overriding the API key via `--api-key`. **TODO:** replace the dummy `fetch_orderbook_snapshot` implementation with a real broker API call (Interactive Brokers, Alpaca, etc.) when credentials are available.
     --end 2023-12-31
 ```
 Optional arguments allow changing the interval, retry policy, and output format. **TODO:** replace the dummy `fetch_orderbook_snapshot` implementation with a real broker API call (Interactive Brokers, Alpaca, etc.) when credentials are available.
