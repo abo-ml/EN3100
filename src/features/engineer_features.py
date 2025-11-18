@@ -8,13 +8,15 @@ ready dataframe containing feature columns and supervised learning targets.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Tuple
 
 import numpy as np
 import pandas as pd
 
 from .target import compute_targets
-from ..utils import PROCESSED_DIR
+
+PROCESSED_DIR = Path("data/processed")
 LOGGER = logging.getLogger(__name__)
 
 

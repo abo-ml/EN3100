@@ -11,8 +11,6 @@ The default assets include:
 
 All components operate on daily OHLCV bars sourced via `yfinance`. Hooks are provided for alternative data vendors (Alpha Vantage, Polygon, Interactive Brokers) and advanced modules (order flow imbalance, ICT/SMT liquidity concepts, reinforcement learning). TODO markers highlight where sensitive credentials, private market data, or broker integrations must be supplied by the student.
 
-For hands-on setup instructions (virtual environment creation, dependency installation, Alpha Vantage key export, and running the pipeline locally or in Colab), see [`docs/local_setup.md`](docs/local_setup.md).
-
 ## Repository Structure
 ```
 ├── data/
@@ -57,6 +55,7 @@ export ALPHAVANTAGE_API_KEY="<YOUR_ALPHA_VANTAGE_KEY>"
 export ALPHA_VANTAGE_API_KEY="$ALPHAVANTAGE_API_KEY"
 ```
 Then pull the required tickers. Alpha Vantage is the default provider with automatic fallbacks to Yahoo Finance for symbols the API does not cover (e.g. broad market indices beginning with `^`).
+Fetch daily OHLCV data and save to `data/raw/`.
 ```bash
 python -m src.data.download_data \
     --tickers AAPL EURUSD=X XAUUSD=X ^GSPC \
@@ -65,6 +64,9 @@ python -m src.data.download_data \
     --provider alpha_vantage
 ```
 Optional arguments allow changing the interval, retry policy, output format, and overriding the API key via `--api-key`. **TODO:** replace the dummy `fetch_orderbook_snapshot` implementation with a real broker API call (Interactive Brokers, Alpaca, etc.) when credentials are available.
+      --end 2023-12-31
+```
+Optional arguments allow changing the interval, retry policy, and output format. **TODO:** replace the dummy `fetch_orderbook_snapshot` implementation with a real broker API call (Interactive Brokers, Alpaca, etc.) when credentials are available.
 
 ### 3. Align data sources
 Merge OHLCV, placeholder order flow, sentiment, and macro features into a single dataset.
@@ -90,47 +92,6 @@ python -m src.models.iteration4_transformer
 python -m src.models.iteration5_meta_ensemble
 ```
 Refer to the notebooks in `notebooks/` for guided walkthroughs, narrative commentary, and exploratory analysis aligned with each iteration.
-
-### 6. Running the project in Google Colab (or similar hosted notebooks)
-When using Colab you typically upload or clone the repository into `/content`. The centralised
-path utilities in `src/utils/paths.py` keep all artefacts anchored to the project root so the
-commands below work regardless of the current working directory.
-
-```python
-# 1. (Optional) mount Google Drive if you want persistence beyond the session
-from google.colab import drive
-drive.mount("/content/drive")
-
-# 2. Unzip or clone the repository into /content
-!unzip -o "/content/EN3100.zip" -d "/content"  # adjust the filename as needed
-
-# 3. Change into the project directory
-%cd "/content/EN3100"
-
-# 4. Install dependencies
-!pip install -r requirements.txt -q
-
-# 5. Set credentials for data providers
-import os
-os.environ["ALPHAVANTAGE_API_KEY"] = "<YOUR_KEY>"  # or ALPHA_VANTAGE_API_KEY
-
-# 6. Run the same pipeline as documented above
-!python -m src.data.download_data --tickers AAPL EURUSD=X XAUUSD=X ^GSPC \
-    --start 2013-01-01 --end 2023-12-31 --provider alpha_vantage
-!python -m src.data.align_data
-!python -m src.features.engineer_features
-!python -m src.models.iteration1_baseline
-```
-
-Key points for hosted notebooks:
-
-- Always `cd` into the inner project folder before running CLI commands. With the shared
-  path utilities, outputs will be directed to `data/` and `reports/` even if you launch a
-  command one level higher, but switching directories avoids confusion when exploring files.
-- Persist `data/` and `reports/` by copying them to Google Drive (or downloading them) at the
-  end of the session if you want to resume without repeating the downloads.
-- Keep API keys in environment variables or secret managers. Never hard-code credentials into
-  notebooks before sharing or committing them.
 
 ## Iteration Roadmap
 1. **Iteration 1 – Linear Baselines:** Persistence, linear regression, and logistic regression models validate the pipeline and establish benchmark metrics.
