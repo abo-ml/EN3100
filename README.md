@@ -64,7 +64,7 @@ python -m src.data.download_data \
     --provider alpha_vantage
 ```
 Optional arguments allow changing the interval, retry policy, output format, and overriding the API key via `--api-key`. **TODO:** replace the dummy `fetch_orderbook_snapshot` implementation with a real broker API call (Interactive Brokers, Alpaca, etc.) when credentials are available.
-    --end 2023-12-31
+      --end 2023-12-31
 ```
 Optional arguments allow changing the interval, retry policy, and output format. **TODO:** replace the dummy `fetch_orderbook_snapshot` implementation with a real broker API call (Interactive Brokers, Alpaca, etc.) when credentials are available.
 
