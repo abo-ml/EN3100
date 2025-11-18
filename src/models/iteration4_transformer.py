@@ -27,13 +27,29 @@ WINDOW = 60
 
 
 def positional_encoding(length: int, depth: int) -> tf.Tensor:
-    depth = depth / 2
+    """Return sinusoidal positional encodings that match the feature width.
+
+    The original implementation halved the depth using float division, which
+    could truncate odd-dimensional feature spaces and trigger shape mismatches
+    when adding the encoding to the inputs. We keep the encoding width equal to
+    the input feature count by using integer division and zero-padding for odd
+    depths.
+    """
+
+    depth_int = int(depth)
+    half_depth = max(1, depth_int // 2)
     positions = np.arange(length)[:, np.newaxis]
-    depths = np.arange(depth)[np.newaxis, :] / depth
+    depths = np.arange(half_depth)[np.newaxis, :] / half_depth
     angle_rates = 1 / (10000 ** depths)
     angle_rads = positions * angle_rates
     pos_encoding = np.concatenate([np.sin(angle_rads), np.cos(angle_rads)], axis=-1)
-    return tf.cast(pos_encoding, dtype=tf.float32)
+
+    # If the original feature dimension is odd, pad with zeros to preserve shape.
+    if pos_encoding.shape[-1] < depth_int:
+        pad_width = depth_int - pos_encoding.shape[-1]
+        pos_encoding = np.pad(pos_encoding, ((0, 0), (0, pad_width)), mode="constant")
+
+    return tf.cast(pos_encoding[:, :depth_int], dtype=tf.float32)
 
 
 def transformer_encoder(inputs: tf.Tensor, num_heads: int, ff_dim: int, dropout: float) -> tf.Tensor:
