@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -17,13 +18,12 @@ from src.evaluation.walkforward import aggregate_metrics, walk_forward_splits
 from src.models.iteration1_baseline import feature_columns, load_dataset
 from src.models.iteration3_lstm import build_lstm_regressor
 from src.models.iteration4_transformer import build_transformer_model
-from src.utils import REPORTS_DIR
 
 SEED = 42
 np.random.seed(SEED)
 tf.random.set_seed(SEED)
 
-REPORT_PATH = REPORTS_DIR / "iteration_5_results.md"
+REPORT_PATH = Path("reports/iteration_5_results.md")
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level="INFO")
 
