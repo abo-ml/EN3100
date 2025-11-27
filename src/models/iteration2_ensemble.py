@@ -17,12 +17,14 @@ from src.evaluation.metrics import directional_accuracy, mae, r2, rmse
 from src.evaluation.reporting import save_metrics_report
 from src.evaluation.walkforward import aggregate_metrics, walk_forward_splits
 from src.models.iteration1_baseline import feature_columns, load_dataset
+from src.utils import REPORTS_DIR
 
 try:  # pragma: no cover - optional dependency
     from xgboost import XGBRegressor
 except ImportError:  # pragma: no cover
     XGBRegressor = None
 
+REPORT_PATH = REPORTS_DIR / "iteration_2_results.md"
 REPORT_PATH = Path("reports/iteration_2_results.md")
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level="INFO")
@@ -110,6 +112,7 @@ def run_iteration() -> Dict[str, float]:
     # Save average feature importances
     if rf_importances:
         mean_importance = pd.DataFrame(rf_importances).mean().sort_values(ascending=False)
+        importance_path = REPORTS_DIR / "iteration2_feature_importance.csv"
         importance_path = Path("reports/iteration2_feature_importance.csv")
         importance_path.parent.mkdir(parents=True, exist_ok=True)
         mean_importance.to_csv(importance_path)

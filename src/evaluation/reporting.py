@@ -8,6 +8,7 @@ from typing import Dict
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from ..utils import FIGURES_DIR, REPORTS_DIR
 REPORTS_DIR = Path("reports")
 FIGURES_DIR = REPORTS_DIR / "figures"
 
@@ -20,6 +21,17 @@ def save_metrics_report(metrics_dict: Dict[str, float], path: Path) -> None:
     path.write_text("\n".join(lines))
 
 
+def _maybe_save_additional(fig: plt.Figure, primary_path: Path, fallback_name: str) -> None:
+    """Persist a duplicate copy of the figure when requested by tutorials/Colab."""
+
+    fallback_path = Path(fallback_name)
+    if fallback_path.resolve() == primary_path.resolve():
+        return
+    if fallback_path.parent not in (Path("."), Path("")):
+        fallback_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(fallback_path, bbox_inches="tight")
+
+
 def plot_pred_vs_actual(dates: pd.Series, actual: pd.Series, predicted: pd.Series, title: str, filename: str) -> Path:
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(10, 4))
@@ -30,6 +42,7 @@ def plot_pred_vs_actual(dates: pd.Series, actual: pd.Series, predicted: pd.Serie
     fig.autofmt_xdate()
     output_path = FIGURES_DIR / filename
     fig.savefig(output_path, bbox_inches="tight")
+    _maybe_save_additional(fig, output_path, filename)
     plt.close(fig)
     return output_path
 
@@ -43,5 +56,6 @@ def plot_equity_curve(dates: pd.Series, equity_curve: pd.Series, title: str, fil
     fig.autofmt_xdate()
     output_path = FIGURES_DIR / filename
     fig.savefig(output_path, bbox_inches="tight")
+    _maybe_save_additional(fig, output_path, filename)
     plt.close(fig)
     return output_path

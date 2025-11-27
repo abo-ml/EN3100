@@ -12,6 +12,10 @@ from sklearn.preprocessing import StandardScaler
 from src.evaluation.metrics import directional_accuracy, mae, r2, rmse
 from src.evaluation.reporting import plot_pred_vs_actual, save_metrics_report
 from src.evaluation.walkforward import aggregate_metrics, walk_forward_splits
+from src.utils import PROCESSED_DIR, REPORTS_DIR
+
+SEED = 42
+REPORT_PATH = REPORTS_DIR / "iteration_1_results.md"
 
 SEED = 42
 REPORT_PATH = Path("reports/iteration_1_results.md")
@@ -22,6 +26,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 def load_dataset() -> pd.DataFrame:
+    path = PROCESSED_DIR / "model_features.parquet"
     path = Path("data/processed/model_features.parquet")
     if not path.exists():
         raise FileNotFoundError("Run feature engineering before training models")

@@ -14,11 +14,13 @@ from src.evaluation.reporting import save_metrics_report
 from src.evaluation.walkforward import aggregate_metrics, walk_forward_splits
 from src.models.iteration1_baseline import feature_columns, load_dataset
 from src.models.iteration3_lstm import create_sequences
+from src.utils import REPORTS_DIR
 
 SEED = 42
 np.random.seed(SEED)
 tf.random.set_seed(SEED)
 
+REPORT_PATH = REPORTS_DIR / "iteration_4_results.md"
 REPORT_PATH = Path("reports/iteration_4_results.md")
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level="INFO")

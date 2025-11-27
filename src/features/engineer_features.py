@@ -15,6 +15,8 @@ import numpy as np
 import pandas as pd
 
 from .target import compute_targets
+from ..advanced.pattern_recognition import moving_average_crossovers, swing_high_low_flags
+from ..utils import PROCESSED_DIR
 
 PROCESSED_DIR = Path("data/processed")
 LOGGER = logging.getLogger(__name__)
@@ -151,6 +153,13 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
         group["depth_ratio"] = depth_ratio(bid_vol, ask_vol)
         group["bid_ask_spread"] = bid_ask_spread_proxy(group.get("bid_price"), group.get("ask_price"), group["close"])
 
+        crossover_flags = moving_average_crossovers(group)
+        for name, series in crossover_flags.items():
+            group[name] = series
+
+        swing_flags = swing_high_low_flags(group)
+        for name, series in swing_flags.items():
+            group[name] = series
         pattern_flags = detect_chart_patterns_stub()
         for name, value in pattern_flags.items():
             group[name] = value
