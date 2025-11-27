@@ -8,6 +8,10 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Iterable, Optional
+"""Future-work stubs for sentiment analysis integration."""
+from __future__ import annotations
+
+from typing import Iterable
 
 import pandas as pd
 
@@ -43,4 +47,13 @@ def sentiment_to_feature(price_df: pd.DataFrame, sentiment_df: pd.DataFrame, dat
     temp[date_key] = pd.to_datetime(temp[date_key])
     price_df[date_key] = pd.to_datetime(price_df[date_key])
     merged = price_df.merge(temp[["ticker", date_key, "sentiment_score"]], on=["ticker", date_key], how="left")
+def sentiment_to_feature(price_df: pd.DataFrame, sentiment_df: pd.DataFrame) -> pd.DataFrame:
+    """Align sentiment scores with price data."""
+
+    sentiment_df = sentiment_df.copy()
+    sentiment_df["timestamp"] = pd.to_datetime(sentiment_df["timestamp"])
+    sentiment_daily = sentiment_df.groupby(sentiment_df["timestamp"].dt.date)["sentiment_score"].agg(["mean", "std"]).reset_index()
+    sentiment_daily.rename(columns={"timestamp": "date", "mean": "sentiment_mean", "std": "sentiment_std"}, inplace=True)
+    price_df["date"] = pd.to_datetime(price_df["date"]).dt.date
+    merged = price_df.merge(sentiment_daily, on="date", how="left")
     return merged

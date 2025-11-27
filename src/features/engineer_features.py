@@ -8,6 +8,7 @@ ready dataframe containing feature columns and supervised learning targets.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Tuple
 
 import numpy as np
@@ -16,6 +17,8 @@ import pandas as pd
 from .target import compute_targets
 from ..advanced.pattern_recognition import moving_average_crossovers, swing_high_low_flags
 from ..utils import PROCESSED_DIR
+
+PROCESSED_DIR = Path("data/processed")
 LOGGER = logging.getLogger(__name__)
 
 
@@ -64,6 +67,16 @@ def swing_points(high: pd.Series, low: pd.Series, window: int = 3) -> Tuple[pd.S
     swing_high = high[(high.shift(window) < high) & (high.shift(-window) < high)].astype(float)
     swing_low = low[(low.shift(window) > low) & (low.shift(-window) > low)].astype(float)
     return swing_high, swing_low
+
+
+def detect_chart_patterns_stub() -> dict:
+    """Return zeros as placeholders for chart pattern detection."""
+
+    return {
+        "pattern_head_shoulders": 0,
+        "pattern_double_top": 0,
+        "pattern_double_bottom": 0,
+    }
 
 
 def ict_smt_asia_window_feature() -> float:
@@ -139,13 +152,6 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
         group["ofi"] = order_flow_imbalance(bid_vol, ask_vol)
         group["depth_ratio"] = depth_ratio(bid_vol, ask_vol)
         group["bid_ask_spread"] = bid_ask_spread_proxy(group.get("bid_price"), group.get("ask_price"), group["close"])
-        # Order-book placeholders often contain zeros only, which would otherwise
-        # yield NaNs (division by zero) and break downstream scaling. Replace
-        # missing microstructure fields with neutral zeros so the feature matrix
-        # remains numeric until real depth data is integrated.
-        group["ofi"] = group["ofi"].fillna(0.0)
-        group["depth_ratio"] = group["depth_ratio"].fillna(0.0)
-        group["bid_ask_spread"] = group["bid_ask_spread"].fillna(0.0)
 
         crossover_flags = moving_average_crossovers(group)
         for name, series in crossover_flags.items():
@@ -154,6 +160,9 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
         swing_flags = swing_high_low_flags(group)
         for name, series in swing_flags.items():
             group[name] = series
+        pattern_flags = detect_chart_patterns_stub()
+        for name, value in pattern_flags.items():
+            group[name] = value
 
         group["ict_smt_asia"] = ict_smt_asia_window_feature()
         group["sentiment_score"] = group.get("sentiment_score", 0.0)

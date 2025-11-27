@@ -5,6 +5,11 @@ as a fallback, performs basic cleaning, and stores the results under
 ``data/raw`` for subsequent processing. Hooks are included for integrating
 higher-frequency order book data from broker APIs. The functions are designed
 for reproducibility in the accompanying dissertation project.
+This module handles interaction with Yahoo Finance via yfinance, performs
+basic cleaning, and stores the results under ``data/raw`` for subsequent
+processing. Hooks are included for integrating higher-frequency order book data
+from broker APIs. The functions are designed for reproducibility in the
+accompanying dissertation project.
 """
 from __future__ import annotations
 
@@ -28,6 +33,7 @@ except ImportError:  # pragma: no cover
     TimeSeries = None
 
 from ..utils import RAW_DATA_DIR
+RAW_DATA_DIR = Path("data/raw")
 LOGGER = logging.getLogger(__name__)
 
 
@@ -46,6 +52,7 @@ class DownloadConfig:
         End date (inclusive) in YYYY-MM-DD format.
     interval:
         Sampling interval (currently ``1d`` supported for Alpha Vantage).
+        Sampling interval for yfinance (default daily).
     max_retries:
         Number of retries when network requests fail.
     retry_backoff:
@@ -245,6 +252,38 @@ def download_single_ticker(ticker: str, config: DownloadConfig) -> pd.DataFrame:
         LOGGER.info("Falling back from provider %s for %s", provider, ticker)
 
     raise RuntimeError(f"Failed to download {ticker}") from last_error
+def download_single_ticker(ticker: str, config: DownloadConfig) -> pd.DataFrame:
+    """Download OHLCV data for a single ticker with retry logic."""
+
+    attempt = 0
+    while True:
+        try:
+            LOGGER.info("Downloading %s", ticker)
+            data = yf.download(
+                ticker,
+                start=config.start,
+                end=config.end,
+                interval=config.interval,
+                progress=False,
+            )
+            if data.empty:
+                raise ValueError(f"No data returned for {ticker}")
+            data = data.rename(columns=str.lower)
+            data.index = data.index.tz_localize(None)
+            data["ticker"] = ticker
+            data.reset_index(inplace=True)
+            data.rename(columns={"index": "date"}, inplace=True)
+            data.sort_values("date", inplace=True)
+            data = data.ffill().dropna(subset=["close"])  # forward fill gaps
+            return data
+        except Exception as exc:  # noqa: BLE001
+            attempt += 1
+            if attempt > config.max_retries:
+                LOGGER.exception("Failed to download %s after %d attempts", ticker, attempt)
+                raise exc
+            sleep_time = config.retry_backoff ** attempt
+            LOGGER.warning("Retry %s/%s for %s after error: %s", attempt, config.max_retries, ticker, exc)
+            time.sleep(sleep_time)
 
 
 def download_ohlcv(config: DownloadConfig) -> pd.DataFrame:
@@ -259,6 +298,7 @@ def download_ohlcv(config: DownloadConfig) -> pd.DataFrame:
         frames.append(frame)
         output_stem = _normalise_ticker_for_filename(ticker)
         output_path = RAW_DATA_DIR / f"{output_stem}.{config.format}"
+        output_path = RAW_DATA_DIR / f"{ticker.replace('^', '')}.{config.format}"
         ensure_directory(output_path)
         if config.format == "csv":
             frame.to_csv(output_path, index=False)
@@ -298,6 +338,9 @@ def fetch_orderbook_snapshot(ticker: str) -> pd.DataFrame:
     #         "ask_price": [payload["asks"][0]["p"] if payload.get("asks") else np.nan],
     #     }
     # )
+    alpaca_api_key = "#"  # TODO: replace with Alpaca API key (e.g., read from env)
+    alpaca_secret_key = "#"  # TODO: replace with Alpaca secret key (secure storage only)
+    _ = (alpaca_api_key, alpaca_secret_key)  # keep placeholders referenced
 
     now = pd.Timestamp.utcnow().floor("min")
     dummy = pd.DataFrame(
@@ -317,6 +360,7 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     """Parse command line arguments."""
 
     parser = argparse.ArgumentParser(description="Download OHLCV data from public APIs")
+    parser = argparse.ArgumentParser(description="Download OHLCV data via yfinance")
     parser.add_argument("--tickers", nargs="+", required=True, help="List of tickers to download")
     parser.add_argument("--start", required=True, help="Start date (YYYY-MM-DD)")
     parser.add_argument("--end", required=True, help="End date (YYYY-MM-DD)")
