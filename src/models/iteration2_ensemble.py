@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -24,6 +25,7 @@ except ImportError:  # pragma: no cover
     XGBRegressor = None
 
 REPORT_PATH = REPORTS_DIR / "iteration_2_results.md"
+REPORT_PATH = Path("reports/iteration_2_results.md")
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level="INFO")
 
@@ -111,6 +113,7 @@ def run_iteration() -> Dict[str, float]:
     if rf_importances:
         mean_importance = pd.DataFrame(rf_importances).mean().sort_values(ascending=False)
         importance_path = REPORTS_DIR / "iteration2_feature_importance.csv"
+        importance_path = Path("reports/iteration2_feature_importance.csv")
         importance_path.parent.mkdir(parents=True, exist_ok=True)
         mean_importance.to_csv(importance_path)
 

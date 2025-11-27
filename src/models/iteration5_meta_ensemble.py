@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -24,6 +25,7 @@ np.random.seed(SEED)
 tf.random.set_seed(SEED)
 
 REPORT_PATH = REPORTS_DIR / "iteration_5_results.md"
+REPORT_PATH = Path("reports/iteration_5_results.md")
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level="INFO")
 
