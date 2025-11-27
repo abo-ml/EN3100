@@ -317,6 +317,27 @@ def fetch_orderbook_snapshot(ticker: str) -> pd.DataFrame:
     can be aggregated into order-flow imbalance signals.
     """
 
+    # Example wiring (commented out) for Alpaca Market Data v2 order book endpoint.
+    # Replace the placeholders with your credentials and uncomment when ready:
+    #
+    # alpaca_api_key = "#"  # TODO: replace with Alpaca API key (e.g., read from env)
+    # alpaca_secret_key = "#"  # TODO: replace with Alpaca secret key (secure storage only)
+    # import requests
+    # headers = {"APCA-API-KEY-ID": alpaca_api_key, "APCA-API-SECRET-KEY": alpaca_secret_key}
+    # url = f"https://data.alpaca.markets/v2/stocks/{ticker}/orderbooks/latest"
+    # response = requests.get(url, headers=headers, timeout=10)
+    # response.raise_for_status()
+    # payload = response.json()
+    # return pd.DataFrame(
+    #     {
+    #         "timestamp": [pd.to_datetime(payload["timestamp"]).tz_localize(None)],
+    #         "ticker": [ticker],
+    #         "bid_volume": [payload["bids"][0]["s"] if payload.get("bids") else np.nan],
+    #         "ask_volume": [payload["asks"][0]["s"] if payload.get("asks") else np.nan],
+    #         "bid_price": [payload["bids"][0]["p"] if payload.get("bids") else np.nan],
+    #         "ask_price": [payload["asks"][0]["p"] if payload.get("asks") else np.nan],
+    #     }
+    # )
     alpaca_api_key = "#"  # TODO: replace with Alpaca API key (e.g., read from env)
     alpaca_secret_key = "#"  # TODO: replace with Alpaca secret key (secure storage only)
     _ = (alpaca_api_key, alpaca_secret_key)  # keep placeholders referenced

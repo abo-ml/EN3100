@@ -175,6 +175,7 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     features = pd.concat(feature_frames, ignore_index=True)
     regime_dummies = pd.get_dummies(features["realised_vol_bucket"], prefix="regime")
     features = pd.concat([features, regime_dummies], axis=1)
+    features = features.drop(columns=["realised_vol_bucket"])
 
     features.sort_values(["ticker", "date"], inplace=True)
     features = features.groupby("ticker").apply(lambda grp: grp.iloc[252:]).reset_index(drop=True)

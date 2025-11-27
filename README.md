@@ -149,6 +149,19 @@ Robustness is evaluated via chronological walk-forward validation across all ass
 - **Sentiment APIs:** Add keys for Twitter, news providers, or alternative sentiment platforms via `os.environ["SENTIMENT_API_KEY"]`.
 - **Execution / Trading APIs:** Connect the VWAP/TWAP planners to broker SDKs once paper trading permissions are granted.
 
+### TODO checklist (API and private data wiring)
+- `src/data/download_data.py::fetch_orderbook_snapshot`: replace the commented Alpaca placeholders (`APCA-API-KEY-ID`, `APCA-API-SECRET-KEY`) and return live Level 2 depth.
+- `src/data/download_data.py` CLI: supply your Alpha Vantage key via `--api-key` or the `ALPHAVANTAGE_API_KEY/ALPHA_VANTAGE_API_KEY` environment variable when using the Alpha Vantage provider.
+- `src/data/align_data.py`: pass `--sentiment-csv` or populate `fetch_sentiment_scores` with your API-backed sentiment feed.
+- `src/advanced/sentiment.py`: implement the real sentiment loaders or API calls; keep credentials outside version control.
+- `src/advanced/orderflow_scalping.py`: populate order book ingestion and OFI calculations using broker APIs.
+- `src/advanced/pattern_recognition.py`: replace placeholders with rule-based or ML-driven chart-pattern detectors once you have annotated data.
+
+### If you hit a merge conflict on GitHub
+- Prefer the version that keeps the Alpha Vantage+yfinance downloader and shared path utilities (for example, **accept the incoming change** in `src/data/download_data.py`).
+- Confirm post-merge that data still lands in `data/raw` and reports in `reports/`, and re-run `python -m compileall src`.
+- See `MERGE_GUIDE.md` for a concise checklist.
+
 ## Reports & Interpretation
 Each iteration stores Markdown summaries in `reports/iteration_X_results.md` and plots in `reports/figures/`. Review these artefacts alongside the notebooks to interpret model strengths, weaknesses, and improvement paths. Iteration 5 additionally logs cumulative PnL, Sharpe ratio, max drawdown, and hit rate for the dynamic strategy.
 
