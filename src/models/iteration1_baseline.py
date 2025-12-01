@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Dict, List
 
 import pandas as pd
@@ -16,6 +17,9 @@ from src.utils import PROCESSED_DIR, REPORTS_DIR
 SEED = 42
 REPORT_PATH = REPORTS_DIR / "iteration_1_results.md"
 
+SEED = 42
+REPORT_PATH = Path("reports/iteration_1_results.md")
+
 
 logging.basicConfig(level="INFO")
 LOGGER = logging.getLogger(__name__)
@@ -23,6 +27,7 @@ LOGGER = logging.getLogger(__name__)
 
 def load_dataset() -> pd.DataFrame:
     path = PROCESSED_DIR / "model_features.parquet"
+    path = Path("data/processed/model_features.parquet")
     if not path.exists():
         raise FileNotFoundError("Run feature engineering before training models")
     df = pd.read_parquet(path)

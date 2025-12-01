@@ -55,6 +55,7 @@ export ALPHAVANTAGE_API_KEY="<YOUR_ALPHA_VANTAGE_KEY>"
 export ALPHA_VANTAGE_API_KEY="$ALPHAVANTAGE_API_KEY"
 ```
 Then pull the required tickers. Alpha Vantage is the default provider with automatic fallbacks to Yahoo Finance for symbols the API does not cover (e.g. broad market indices beginning with `^`).
+Fetch daily OHLCV data and save to `data/raw/`.
 ```bash
 python -m src.data.download_data \
     --tickers AAPL EURUSD=X XAUUSD=X ^GSPC \
@@ -63,6 +64,9 @@ python -m src.data.download_data \
     --provider alpha_vantage
 ```
 Optional arguments allow changing the interval, retry policy, output format, and overriding the API key via `--api-key`. **TODO:** replace the dummy `fetch_orderbook_snapshot` implementation with a real broker API call (Interactive Brokers, Alpaca, etc.) when credentials are available.
+      --end 2023-12-31
+```
+Optional arguments allow changing the interval, retry policy, and output format. **TODO:** replace the dummy `fetch_orderbook_snapshot` implementation with a real broker API call (Interactive Brokers, Alpaca, etc.) when credentials are available.
 
 ### 3. Align data sources
 Merge OHLCV, placeholder order flow, sentiment, and macro features into a single dataset.
@@ -82,13 +86,10 @@ Outputs include `data/processed/model_features.parquet`. TODO markers indicate w
 Each iteration script performs walk-forward validation, trains the designated models, logs metrics to `reports/`, and saves diagnostic plots.
 ```bash
 python -m src.models.iteration1_baseline
-python -m src.models.iteration1_1_svr
 python -m src.models.iteration2_ensemble
-python -m src.models.iteration2_1_lightgbm
 python -m src.models.iteration3_lstm
 python -m src.models.iteration4_transformer
 python -m src.models.iteration5_meta_ensemble
-python -m src.risk.monte_carlo  # requires iteration 5 to have run
 ```
 Refer to the notebooks in `notebooks/` for guided walkthroughs, narrative commentary, and exploratory analysis aligned with each iteration.
 
