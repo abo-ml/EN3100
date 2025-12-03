@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -17,13 +18,14 @@ from src.evaluation.walkforward import aggregate_metrics, walk_forward_splits
 from src.models.iteration1_baseline import feature_columns, load_dataset
 from src.models.iteration3_lstm import build_lstm_regressor
 from src.models.iteration4_transformer import build_transformer_model
-from src.utils import PROCESSED_DIR, REPORTS_DIR
+from src.utils import REPORTS_DIR
 
 SEED = 42
 np.random.seed(SEED)
 tf.random.set_seed(SEED)
 
 REPORT_PATH = REPORTS_DIR / "iteration_5_results.md"
+REPORT_PATH = Path("reports/iteration_5_results.md")
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level="INFO")
 
@@ -84,7 +86,6 @@ def run_iteration() -> Dict[str, float]:
 
     records = []
     equity_curves = []
-    strategy_return_frames = []
 
     for split_id, (train_idx, test_idx) in enumerate(walk_forward_splits(df, n_splits=3, train_min_period=252), start=1):
         train = df.iloc[train_idx].copy()
@@ -96,9 +97,6 @@ def run_iteration() -> Dict[str, float]:
         meta_window = max(WINDOW + 5, int(0.2 * len(train)))
         inner_train = train.iloc[:-meta_window]
         meta_train = train.iloc[-meta_window:]
-
-        # Preserve unscaled volatility for risk sizing before we standardise features.
-        test_volatility_raw = test["volatility_21"].copy()
 
         scaler = StandardScaler()
         inner_train[features] = scaler.fit_transform(inner_train[features])
@@ -190,7 +188,7 @@ def run_iteration() -> Dict[str, float]:
         test_df["pred_return"] = meta_pred
         test_df["pred_prob_up"] = class_probs
         test_df["actual_return"] = test.loc[test_df["row_index"], "next_day_return"].values
-        test_df["volatility"] = test_volatility_raw.loc[test_df["row_index"]].values
+        test_df["volatility"] = test.loc[test_df["row_index"], "volatility_21"].values
         test_df["date"] = test.loc[test_df["row_index"], "date"].values
 
         position_size = np.clip(test_df["pred_return"] / (test_df["volatility"].replace(0, np.nan) + 1e-6), -MAX_LEVERAGE, MAX_LEVERAGE)
@@ -209,25 +207,9 @@ def run_iteration() -> Dict[str, float]:
 
         equity_curve = (1 + strategy_returns).cumprod()
         equity_curves.append(pd.DataFrame({"date": test_df["date"], "equity": equity_curve}))
-        strategy_return_frames.append(
-            pd.DataFrame(
-                {
-                    "date": test_df["date"].values,
-                    "strategy_return": strategy_returns,
-                }
-            )
-        )
 
     summary = aggregate_metrics(records)
     save_metrics_report(summary, REPORT_PATH)
-
-    if strategy_return_frames:
-        combined_returns = pd.concat(strategy_return_frames).sort_values("date")
-        combined_returns["equity_curve"] = (1 + combined_returns["strategy_return"]).cumprod()
-        PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-        output_returns = PROCESSED_DIR / "iteration5_strategy_returns.csv"
-        combined_returns.to_csv(output_returns, index=False)
-        LOGGER.info("Saved strategy returns to %s", output_returns)
 
     if equity_curves:
         combined = pd.concat(equity_curves).sort_values("date")
