@@ -18,14 +18,18 @@ All components operate on daily OHLCV bars sourced via `yfinance`. Hooks are pro
 │   └── processed/          # Aligned and feature-engineered datasets
 ├── notebooks/
 │   ├── Iteration_1.ipynb.py
+│   ├── Iteration_1_1.ipynb.py
 │   ├── Iteration_2.ipynb.py
+│   ├── Iteration_2_1.ipynb.py
 │   ├── Iteration_3.ipynb.py
 │   ├── Iteration_4.ipynb.py
 │   └── Iteration_5.ipynb.py
 ├── reports/
 │   ├── figures/            # Generated plots
 │   ├── iteration_1_results.md
+│   ├── iteration_1_1_svr_results.md
 │   ├── iteration_2_results.md
+│   ├── iteration_2_1_lightgbm_results.md
 │   ├── iteration_3_results.md
 │   ├── iteration_4_results.md
 │   └── iteration_5_results.md
@@ -64,9 +68,6 @@ python -m src.data.download_data \
     --provider alpha_vantage
 ```
 Optional arguments allow changing the interval, retry policy, output format, and overriding the API key via `--api-key`. **TODO:** replace the dummy `fetch_orderbook_snapshot` implementation with a real broker API call (Interactive Brokers, Alpaca, etc.) when credentials are available.
-      --end 2023-12-31
-```
-Optional arguments allow changing the interval, retry policy, and output format. **TODO:** replace the dummy `fetch_orderbook_snapshot` implementation with a real broker API call (Interactive Brokers, Alpaca, etc.) when credentials are available.
 
 ### 3. Align data sources
 Merge OHLCV, placeholder order flow, sentiment, and macro features into a single dataset.
@@ -86,10 +87,13 @@ Outputs include `data/processed/model_features.parquet`. TODO markers indicate w
 Each iteration script performs walk-forward validation, trains the designated models, logs metrics to `reports/`, and saves diagnostic plots.
 ```bash
 python -m src.models.iteration1_baseline
+python -m src.models.iteration1_1_svr
 python -m src.models.iteration2_ensemble
+python -m src.models.iteration2_1_lightgbm
 python -m src.models.iteration3_lstm
 python -m src.models.iteration4_transformer
 python -m src.models.iteration5_meta_ensemble
+python -m src.risk.monte_carlo  # requires iteration 5 to have run
 ```
 Refer to the notebooks in `notebooks/` for guided walkthroughs, narrative commentary, and exploratory analysis aligned with each iteration.
 
@@ -136,10 +140,13 @@ Key points for hosted notebooks:
 
 ## Iteration Roadmap
 1. **Iteration 1 – Linear Baselines:** Persistence, linear regression, and logistic regression models validate the pipeline and establish benchmark metrics.
-2. **Iteration 2 – Tree-Based Ensembles:** Random Forest, optional XGBoost, and SVM classifiers capture nonlinear relationships and deliver feature importance insights.
-3. **Iteration 3 – LSTM Sequence Model:** Recurrent neural networks learn temporal dependencies over rolling windows and introduce deep learning considerations (scaling, early stopping, regularisation).
-4. **Iteration 4 – Transformer Encoder:** Attention mechanisms handle long-range dependencies and multimodal inputs (price, sentiment, order flow placeholders) for enhanced forecasting power.
-5. **Iteration 5 – Meta-Ensemble with Risk Layer:** Stacks the strongest models, applies dynamic volatility-aware position sizing, and outlines execution scheduling stubs (VWAP/TWAP, pairs trading hook).
+2. **Iteration 1.1 – SVR Baseline:** Extends Iteration 1 with an RBF Support Vector Regressor to benchmark kernel-based nonlinearity against the linear regressor on identical walk-forward splits.
+3. **Iteration 2 – Tree-Based Ensembles:** Random Forest, optional XGBoost, and SVM classifiers capture nonlinear relationships and deliver feature importance insights.
+4. **Iteration 2.1 – LightGBM Upgrade:** Extends Iteration 2 with a gradient-boosted tree regressor (LightGBM) plus feature importances, allowing a direct comparison to the Random Forest/XGBoost ensemble.
+5. **Iteration 3 – LSTM Sequence Model:** Recurrent neural networks learn temporal dependencies over rolling windows and introduce deep learning considerations (scaling, early stopping, regularisation).
+6. **Iteration 4 – Transformer Encoder:** Attention mechanisms handle long-range dependencies and multimodal inputs (price, sentiment, order flow placeholders) for enhanced forecasting power.
+7. **Iteration 5 – Meta-Ensemble with Risk Layer:** Stacks the strongest models, applies dynamic volatility-aware position sizing, and outlines execution scheduling stubs (VWAP/TWAP, pairs trading hook).
+8. **Iteration 5 – Monte Carlo Risk:** A standalone Monte Carlo module bootstraps Iteration 5 strategy returns to stress-test equity curve variability, drawdown risk, and tail outcomes.
 
 ## Validation & Fairness Across Market Regimes
 Robustness is evaluated via chronological walk-forward validation across all assets. Metrics are aggregated within each split to inspect performance under varying volatility regimes, drawdowns, and market conditions. The `engineer_features.py` module labels regimes (e.g., high/low volatility buckets, risk-off periods) enabling analysis of whether models degrade during stress events. Future work should further stratify results by asset class, liquidity profiles, and macroeconomic cycles to avoid regime overfitting.
@@ -163,7 +170,7 @@ Robustness is evaluated via chronological walk-forward validation across all ass
 - See `MERGE_GUIDE.md` for a concise checklist.
 
 ## Reports & Interpretation
-Each iteration stores Markdown summaries in `reports/iteration_X_results.md` and plots in `reports/figures/`. Review these artefacts alongside the notebooks to interpret model strengths, weaknesses, and improvement paths. Iteration 5 additionally logs cumulative PnL, Sharpe ratio, max drawdown, and hit rate for the dynamic strategy.
+Each iteration stores Markdown summaries in `reports/iteration_X_results.md` (including the extended `iteration_1_1_svr_results.md`, `iteration_2_1_lightgbm_results.md`, and `iteration_5_monte_carlo.md`) and plots in `reports/figures/`. Review these artefacts alongside the notebooks to interpret model strengths, weaknesses, and improvement paths. Iteration 5 additionally logs cumulative PnL, Sharpe ratio, max drawdown, and hit rate for the dynamic strategy, while `src/risk/monte_carlo.py` produces equity/drawdown histograms and fan charts for stress-testing that strategy.
 
 ## Future Extensions
 - **Microstructure Alpha:** Implement the order flow scalping module with real-time order book data, OFI features, and execution tactics.

@@ -86,6 +86,7 @@ def run_iteration() -> Dict[str, float]:
 
     records = []
     equity_curves = []
+    strategy_return_frames = []
 
     for split_id, (train_idx, test_idx) in enumerate(walk_forward_splits(df, n_splits=3, train_min_period=252), start=1):
         train = df.iloc[train_idx].copy()
@@ -97,6 +98,9 @@ def run_iteration() -> Dict[str, float]:
         meta_window = max(WINDOW + 5, int(0.2 * len(train)))
         inner_train = train.iloc[:-meta_window]
         meta_train = train.iloc[-meta_window:]
+
+        # Preserve unscaled volatility for risk sizing before we standardise features.
+        test_volatility_raw = test["volatility_21"].copy()
 
         scaler = StandardScaler()
         inner_train[features] = scaler.fit_transform(inner_train[features])
@@ -207,9 +211,25 @@ def run_iteration() -> Dict[str, float]:
 
         equity_curve = (1 + strategy_returns).cumprod()
         equity_curves.append(pd.DataFrame({"date": test_df["date"], "equity": equity_curve}))
+        strategy_return_frames.append(
+            pd.DataFrame(
+                {
+                    "date": test_df["date"].values,
+                    "strategy_return": strategy_returns,
+                }
+            )
+        )
 
     summary = aggregate_metrics(records)
     save_metrics_report(summary, REPORT_PATH)
+
+    if strategy_return_frames:
+        combined_returns = pd.concat(strategy_return_frames).sort_values("date")
+        combined_returns["equity_curve"] = (1 + combined_returns["strategy_return"]).cumprod()
+        PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+        output_returns = PROCESSED_DIR / "iteration5_strategy_returns.csv"
+        combined_returns.to_csv(output_returns, index=False)
+        LOGGER.info("Saved strategy returns to %s", output_returns)
 
     if equity_curves:
         combined = pd.concat(equity_curves).sort_values("date")
