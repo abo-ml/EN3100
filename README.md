@@ -172,6 +172,14 @@ Robustness is evaluated via chronological walk-forward validation across all ass
 ## Reports & Interpretation
 Each iteration stores Markdown summaries in `reports/iteration_X_results.md` (including the extended `iteration_1_1_svr_results.md`, `iteration_2_1_lightgbm_results.md`, and `iteration_5_monte_carlo.md`) and plots in `reports/figures/`. Review these artefacts alongside the notebooks to interpret model strengths, weaknesses, and improvement paths. Iteration 5 additionally logs cumulative PnL, Sharpe ratio, max drawdown, and hit rate for the dynamic strategy, while `src/risk/monte_carlo.py` produces equity/drawdown histograms and fan charts for stress-testing that strategy.
 
+## Mathematical Reference (All Equations)
+Every transformation, feature, target, and metric used across the pipeline is written explicitly in `docs/EQUATIONS.md`. Consult that file when documenting methodology or validating that the implementation matches the theoretical definitions (e.g., RSI, MACD, OFI, walk-forward scaling, RMSE/MAE/R², Sharpe/max drawdown, position sizing, Monte Carlo bootstrap).
+
+## Asset Scope Guidance
+- **Single-asset runs (e.g., AAPL only):** useful for isolating model behaviour on one market, speeding up experimentation, and diagnosing feature relevance without cross-asset noise. Risk: overfitting to idiosyncratic patterns.
+- **Single asset class (e.g., multiple equities or multiple FX pairs):** captures shared regime structure within a domain while keeping features comparable. Good middle ground for building specialised models per asset class.
+- **Random sample of ~20 S&P 500 stocks:** broadens cross-sectional variation and can improve generalisation of tabular models (Linear/LightGBM) if features are scaled by ticker. It also enables pseudo cross-sectional learning but may dilute performance on any single name. When sampling, keep walk-forward splits chronological per ticker and consider per-ticker normalisation to avoid large-cap/low-vol names dominating the loss.
+
 ## Future Extensions
 - **Microstructure Alpha:** Implement the order flow scalping module with real-time order book data, OFI features, and execution tactics.
 - **Pattern Recognition & ICT Concepts:** Replace the placeholder pattern detectors with rule-based or vision-based recognition of liquidity grabs, fair value gaps, and Asia session behaviours.

@@ -152,6 +152,13 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
         group["ofi"] = order_flow_imbalance(bid_vol, ask_vol)
         group["depth_ratio"] = depth_ratio(bid_vol, ask_vol)
         group["bid_ask_spread"] = bid_ask_spread_proxy(group.get("bid_price"), group.get("ask_price"), group["close"])
+        # Order-book placeholders often contain zeros only, which would otherwise
+        # yield NaNs (division by zero) and break downstream scaling. Replace
+        # missing microstructure fields with neutral zeros so the feature matrix
+        # remains numeric until real depth data is integrated.
+        group["ofi"] = group["ofi"].fillna(0.0)
+        group["depth_ratio"] = group["depth_ratio"].fillna(0.0)
+        group["bid_ask_spread"] = group["bid_ask_spread"].fillna(0.0)
 
         crossover_flags = moving_average_crossovers(group)
         for name, series in crossover_flags.items():
