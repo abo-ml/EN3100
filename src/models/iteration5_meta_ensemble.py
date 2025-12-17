@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -17,13 +18,14 @@ from src.evaluation.walkforward import aggregate_metrics, walk_forward_splits
 from src.models.iteration1_baseline import feature_columns, load_dataset
 from src.models.iteration3_lstm import build_lstm_regressor
 from src.models.iteration4_transformer import build_transformer_model
-from src.utils import PROCESSED_DIR, REPORTS_DIR
+from src.utils import REPORTS_DIR
 
 SEED = 42
 np.random.seed(SEED)
 tf.random.set_seed(SEED)
 
 REPORT_PATH = REPORTS_DIR / "iteration_5_results.md"
+REPORT_PATH = Path("reports/iteration_5_results.md")
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level="INFO")
 
@@ -190,7 +192,7 @@ def run_iteration() -> Dict[str, float]:
         test_df["pred_return"] = meta_pred
         test_df["pred_prob_up"] = class_probs
         test_df["actual_return"] = test.loc[test_df["row_index"], "next_day_return"].values
-        test_df["volatility"] = test_volatility_raw.loc[test_df["row_index"]].values
+        test_df["volatility"] = test.loc[test_df["row_index"], "volatility_21"].values
         test_df["date"] = test.loc[test_df["row_index"], "date"].values
 
         position_size = np.clip(test_df["pred_return"] / (test_df["volatility"].replace(0, np.nan) + 1e-6), -MAX_LEVERAGE, MAX_LEVERAGE)

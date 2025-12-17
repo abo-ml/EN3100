@@ -59,6 +59,7 @@ export ALPHAVANTAGE_API_KEY="<YOUR_ALPHA_VANTAGE_KEY>"
 export ALPHA_VANTAGE_API_KEY="$ALPHAVANTAGE_API_KEY"
 ```
 Then pull the required tickers. Alpha Vantage is the default provider with automatic fallbacks to Yahoo Finance for symbols the API does not cover (e.g. broad market indices beginning with `^`).
+Fetch daily OHLCV data and save to `data/raw/`.
 ```bash
 python -m src.data.download_data \
     --tickers AAPL EURUSD=X XAUUSD=X ^GSPC \
