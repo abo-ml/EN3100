@@ -1,16 +1,12 @@
 """Future-work stubs for sentiment analysis integration.
 
-This module now includes a lightweight loader for externally prepared sentiment
-scores (e.g. CSV of headline-level labels). It remains intentionally simple so
-students can swap in their own data without altering the feature pipeline.
+This module includes a lightweight loader for externally prepared sentiment
+scores (e.g., a CSV of headline-level labels). Replace these placeholders with
+real API calls as needed.
 """
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable, Optional
-"""Future-work stubs for sentiment analysis integration."""
-from __future__ import annotations
-
 from typing import Iterable
 
 import pandas as pd
@@ -19,7 +15,6 @@ import pandas as pd
 def fetch_sentiment_scores(key_terms: Iterable[str]) -> pd.DataFrame:
     """Placeholder fetching logic returning neutral sentiment."""
 
-    # TODO: Integrate with Twitter API, news feeds, or alternative sentiment vendors.
     rows = [{"timestamp": pd.Timestamp.utcnow(), "key_term": term, "sentiment_score": 0.0} for term in key_terms]
     return pd.DataFrame(rows)
 
@@ -37,6 +32,7 @@ def load_external_sentiment(csv_path: Path) -> pd.DataFrame:
     sentiment_df = pd.read_csv(csv_path, parse_dates=["date"])
     sentiment_df["ticker"] = sentiment_df["ticker"].astype(str)
     sentiment_df["sentiment_score"] = pd.to_numeric(sentiment_df["sentiment_score"], errors="coerce")
+    sentiment_df["date"] = pd.to_datetime(sentiment_df["date"])
     return sentiment_df
 
 
@@ -45,15 +41,7 @@ def sentiment_to_feature(price_df: pd.DataFrame, sentiment_df: pd.DataFrame, dat
 
     temp = sentiment_df.copy()
     temp[date_key] = pd.to_datetime(temp[date_key])
+    price_df = price_df.copy()
     price_df[date_key] = pd.to_datetime(price_df[date_key])
     merged = price_df.merge(temp[["ticker", date_key, "sentiment_score"]], on=["ticker", date_key], how="left")
-def sentiment_to_feature(price_df: pd.DataFrame, sentiment_df: pd.DataFrame) -> pd.DataFrame:
-    """Align sentiment scores with price data."""
-
-    sentiment_df = sentiment_df.copy()
-    sentiment_df["timestamp"] = pd.to_datetime(sentiment_df["timestamp"])
-    sentiment_daily = sentiment_df.groupby(sentiment_df["timestamp"].dt.date)["sentiment_score"].agg(["mean", "std"]).reset_index()
-    sentiment_daily.rename(columns={"timestamp": "date", "mean": "sentiment_mean", "std": "sentiment_std"}, inplace=True)
-    price_df["date"] = pd.to_datetime(price_df["date"]).dt.date
-    merged = price_df.merge(sentiment_daily, on="date", how="left")
     return merged

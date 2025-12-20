@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Tuple
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -65,27 +66,32 @@ def tune_svr(train_df: pd.DataFrame, features: List[str]) -> Dict[str, float]:
     return best_params
 
 
-def run_iteration() -> Dict[str, float]:
-    df = load_dataset()
-    features = feature_columns(df)
+def run_iteration(
+    df: Optional[pd.DataFrame] = None,
+    report_path: Optional[Path] = None,
+    generate_reports: bool = True,
+    ticker: Optional[str] = None,
+) -> Dict[str, float]:
+    dataset = load_dataset(df)
+    features = feature_columns(dataset)
 
     records = []
     all_actual = []
     all_pred_svr = []
     all_dates = []
 
-    for split_id, (train_idx, test_idx) in enumerate(walk_forward_splits(df, n_splits=5, train_min_period=252), start=1):
-        train = df.iloc[train_idx].copy()
-        test = df.iloc[test_idx].copy()
+    for split_id, (train_idx, test_idx) in enumerate(
+        walk_forward_splits(dataset, n_splits=5, train_min_period=252), start=1
+    ):
+        train = dataset.iloc[train_idx].copy()
+        test = dataset.iloc[test_idx].copy()
 
         if len(train) < 50 or len(test) == 0:
             LOGGER.warning("Skipping split %s due to insufficient data", split_id)
             continue
 
-        # Tune SVR using a validation tail inside the training window
         tuned_params = tune_svr(train, features)
 
-        # Fit scalers on full training data for final evaluation
         scaler = StandardScaler()
         X_train = scaler.fit_transform(train[features])
         X_test = scaler.transform(test[features])
@@ -124,18 +130,20 @@ def run_iteration() -> Dict[str, float]:
         )
 
     summary = aggregate_metrics(records)
-    save_metrics_report(summary, REPORT_PATH)
+    if generate_reports:
+        save_metrics_report(summary, report_path or REPORT_PATH)
 
-    if all_pred_svr:
-        plot_pred_vs_actual(
-            dates=pd.Series(all_dates),
-            actual=pd.Series(all_actual),
-            predicted=pd.Series(all_pred_svr),
-            title="Iteration 1.1: SVR vs Actual",
-            filename=PRED_FIG,
-        )
+        if all_pred_svr:
+            plot_pred_vs_actual(
+                dates=pd.Series(all_dates),
+                actual=pd.Series(all_actual),
+                predicted=pd.Series(all_pred_svr),
+                title="Iteration 1.1: SVR vs Actual",
+                filename=PRED_FIG,
+            )
 
-    LOGGER.info("Iteration 1.1 summary: %s", summary)
+    suffix = f" for {ticker}" if ticker else ""
+    LOGGER.info("Iteration 1.1 summary%s: %s", suffix, summary)
     return summary
 
 
