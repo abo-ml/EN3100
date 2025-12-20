@@ -24,6 +24,7 @@ This document collects the mathematical definitions used throughout the EN3100 d
 
 ## Technical indicators
 - **Exponential Moving Average (EMA):** $\text{EMA}_\lambda(t) = \alpha P_t^{\text{close}} + (1-\alpha)\,\text{EMA}_\lambda(t-1)$ where $\alpha = \dfrac{2}{\lambda + 1}$
+- **Simple Moving Average (MA):** $\text{MA}_N(t) = \dfrac{1}{N} \sum_{i=0}^{N-1} P_{t-i}^{\text{close}}$
 - **MACD:** $\text{MACD}_t = \text{EMA}_{12}(t) - \text{EMA}_{26}(t)$; signal line $= \text{EMA}_{9}(\text{MACD}_t)$
 - **RSI (Wilder):** $\text{RS}_t = \dfrac{\text{EMA}_{14}(\text{gains})}{\text{EMA}_{14}(\text{losses})}$, $\text{RSI}_t = 100 - \dfrac{100}{1 + \text{RS}_t}$
 - **Rolling volatility:** $\sigma_t = \sqrt{\dfrac{1}{N-1} \sum_{i=0}^{N-1} (r_{t-i} - \bar{r})^2}$, typically $N=21$
@@ -47,6 +48,9 @@ This document collects the mathematical definitions used throughout the EN3100 d
 
 ## Feature scaling for models
 - **StandardScaler (per split):** $x^{\text{scaled}} = \dfrac{x - \mu_{\text{train}}}{\sigma_{\text{train}}}$ applied after dropping non-numeric columns.
+- **Rolling skewness:** $\text{Skew}_t = \dfrac{1}{N} \sum_{i=0}^{N-1} \left(\dfrac{r_{t-i} - \bar{r}}{\sigma_r}\right)^3$
+- **Rolling kurtosis (excess):** $\text{Kurt}_t = \dfrac{1}{N} \sum_{i=0}^{N-1} \left(\dfrac{r_{t-i} - \bar{r}}{\sigma_r}\right)^4 - 3$
+- **Rolling correlation:** $\rho_{XY}(t) = \dfrac{\sum_{i=0}^{N-1} (x_{t-i}-\bar{x})(y_{t-i}-\bar{y})}{\sqrt{\sum_{i=0}^{N-1} (x_{t-i}-\bar{x})^2 \sum_{i=0}^{N-1} (y_{t-i}-\bar{y})^2}}$
 
 ## Model training and evaluation
 - **Walk-forward splits:** for split $k$, train on $[0, t_k]$, test on $(t_k, t_{k+1}]$ with chronological ordering; no shuffling.
