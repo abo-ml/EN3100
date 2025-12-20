@@ -9,3 +9,4 @@ seaborn>=0.12
 tensorflow>=2.14
 scipy>=1.10
 lightgbm>=4.3
+lxml>=4.9
