@@ -1,16 +1,15 @@
 """Reporting utilities for writing markdown and plots."""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Dict
 
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from ..utils import FIGURES_DIR, REPORTS_DIR
-REPORTS_DIR = Path("reports")
-FIGURES_DIR = REPORTS_DIR / "figures"
+from ..utils import FIGURES_DIR, REPORTS_DIR, ensure_directories
+
+ensure_directories(FIGURES_DIR, REPORTS_DIR)
 
 
 def save_metrics_report(metrics_dict: Dict[str, float], path: Path) -> None:

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -25,7 +25,6 @@ except ImportError:  # pragma: no cover
     XGBRegressor = None
 
 REPORT_PATH = REPORTS_DIR / "iteration_2_results.md"
-REPORT_PATH = Path("reports/iteration_2_results.md")
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level="INFO")
 
@@ -61,16 +60,23 @@ def fit_xgb(X_train, y_train):
     return model
 
 
-def run_iteration() -> Dict[str, float]:
-    df = load_dataset()
-    features = feature_columns(df)
+def run_iteration(
+    df: Optional[pd.DataFrame] = None,
+    report_path: Optional[Path] = None,
+    generate_reports: bool = True,
+    ticker: Optional[str] = None,
+) -> Dict[str, float]:
+    dataset = load_dataset(df)
+    features = feature_columns(dataset)
 
     rf_importances = []
     records = []
 
-    for split_id, (train_idx, test_idx) in enumerate(walk_forward_splits(df, n_splits=5, train_min_period=252), start=1):
-        train = df.iloc[train_idx]
-        test = df.iloc[test_idx]
+    for split_id, (train_idx, test_idx) in enumerate(
+        walk_forward_splits(dataset, n_splits=5, train_min_period=252), start=1
+    ):
+        train = dataset.iloc[train_idx]
+        test = dataset.iloc[test_idx]
 
         scaler = StandardScaler()
         X_train = scaler.fit_transform(train[features])
@@ -98,25 +104,28 @@ def run_iteration() -> Dict[str, float]:
             "svm_accuracy": accuracy_score(test["target_direction"], svm_pred),
         }
         if xgb_model is not None:
-            record.update({
-                "rmse_xgb": rmse(y_test, xgb_pred),
-                "mae_xgb": mae(y_test, xgb_pred),
-                "r2_xgb": r2(y_test, xgb_pred),
-            })
+            record.update(
+                {
+                    "rmse_xgb": rmse(y_test, xgb_pred),
+                    "mae_xgb": mae(y_test, xgb_pred),
+                    "r2_xgb": r2(y_test, xgb_pred),
+                    "directional_accuracy_xgb": directional_accuracy(y_test, xgb_pred),
+                }
+            )
         records.append(record)
 
     summary = aggregate_metrics(records)
-    save_metrics_report(summary, REPORT_PATH)
-    LOGGER.info("Iteration 2 summary: %s", summary)
+    if generate_reports:
+        save_metrics_report(summary, report_path or REPORT_PATH)
 
-    # Save average feature importances
-    if rf_importances:
-        mean_importance = pd.DataFrame(rf_importances).mean().sort_values(ascending=False)
-        importance_path = REPORTS_DIR / "iteration2_feature_importance.csv"
-        importance_path = Path("reports/iteration2_feature_importance.csv")
-        importance_path.parent.mkdir(parents=True, exist_ok=True)
-        mean_importance.to_csv(importance_path)
+        if rf_importances:
+            mean_importance = pd.DataFrame(rf_importances).mean().sort_values(ascending=False)
+            importance_path = REPORTS_DIR / "iteration2_feature_importance.csv"
+            importance_path.parent.mkdir(parents=True, exist_ok=True)
+            mean_importance.to_csv(importance_path)
 
+    suffix = f" for {ticker}" if ticker else ""
+    LOGGER.info("Iteration 2 summary%s: %s", suffix, summary)
     return summary
 
 

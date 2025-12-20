@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import pandas as pd
 from sklearn.linear_model import LinearRegression, LogisticRegression
@@ -16,21 +16,22 @@ from src.utils import PROCESSED_DIR, REPORTS_DIR
 
 SEED = 42
 REPORT_PATH = REPORTS_DIR / "iteration_1_results.md"
-
-SEED = 42
-REPORT_PATH = Path("reports/iteration_1_results.md")
-
+PRED_FIG = "iteration1_pred_vs_actual.png"
 
 logging.basicConfig(level="INFO")
 LOGGER = logging.getLogger(__name__)
 
 
-def load_dataset() -> pd.DataFrame:
-    path = PROCESSED_DIR / "model_features.parquet"
-    path = Path("data/processed/model_features.parquet")
-    if not path.exists():
-        raise FileNotFoundError("Run feature engineering before training models")
-    df = pd.read_parquet(path)
+def load_dataset(df: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+    """Return model features from disk or a provided dataframe."""
+
+    if df is None:
+        path = PROCESSED_DIR / "model_features.parquet"
+        if not path.exists():
+            raise FileNotFoundError("Run feature engineering before training models")
+        df = pd.read_parquet(path)
+    else:
+        df = df.copy()
     df["date"] = pd.to_datetime(df["date"])
     df.sort_values(["date", "ticker"], inplace=True)
     df.reset_index(drop=True, inplace=True)
@@ -42,9 +43,14 @@ def feature_columns(df: pd.DataFrame) -> List[str]:
     return [col for col in df.columns if col not in exclude]
 
 
-def run_iteration() -> Dict[str, float]:
-    df = load_dataset()
-    features = feature_columns(df)
+def run_iteration(
+    df: Optional[pd.DataFrame] = None,
+    report_path: Optional[Path] = None,
+    generate_reports: bool = True,
+    ticker: Optional[str] = None,
+) -> Dict[str, float]:
+    dataset = load_dataset(df)
+    features = feature_columns(dataset)
 
     linear_model = LinearRegression()
     classifier = LogisticRegression(max_iter=1000, random_state=SEED)
@@ -54,9 +60,11 @@ def run_iteration() -> Dict[str, float]:
     actuals_accum = []
     dates_accum = []
 
-    for split_id, (train_idx, test_idx) in enumerate(walk_forward_splits(df, n_splits=5, train_min_period=252), start=1):
-        train = df.iloc[train_idx]
-        test = df.iloc[test_idx]
+    for split_id, (train_idx, test_idx) in enumerate(
+        walk_forward_splits(dataset, n_splits=5, train_min_period=252), start=1
+    ):
+        train = dataset.iloc[train_idx]
+        test = dataset.iloc[test_idx]
 
         scaler = StandardScaler()
         X_train = scaler.fit_transform(train[features])
@@ -88,18 +96,20 @@ def run_iteration() -> Dict[str, float]:
         dates_accum.extend(test["date"].values)
 
     summary = aggregate_metrics(records)
-    save_metrics_report(summary, REPORT_PATH)
+    if generate_reports:
+        save_metrics_report(summary, report_path or REPORT_PATH)
 
-    if predictions_accum:
-        plot_pred_vs_actual(
-            dates=pd.Series(dates_accum),
-            actual=pd.Series(actuals_accum),
-            predicted=pd.Series(predictions_accum),
-            title="Iteration 1: Actual vs Predicted",
-            filename="iteration1_pred_vs_actual.png",
-        )
+        if predictions_accum:
+            plot_pred_vs_actual(
+                dates=pd.Series(dates_accum),
+                actual=pd.Series(actuals_accum),
+                predicted=pd.Series(predictions_accum),
+                title="Iteration 1: Actual vs Predicted",
+                filename=PRED_FIG,
+            )
 
-    LOGGER.info("Iteration 1 summary: %s", summary)
+    suffix = f" for {ticker}" if ticker else ""
+    LOGGER.info("Iteration 1 summary%s: %s", suffix, summary)
     return summary
 
 

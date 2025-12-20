@@ -11,6 +11,9 @@ The default assets include:
 
 All components operate on daily OHLCV bars sourced via `yfinance`. Hooks are provided for alternative data vendors (Alpha Vantage, Polygon, Interactive Brokers) and advanced modules (order flow imbalance, ICT/SMT liquidity concepts, reinforcement learning). TODO markers highlight where sensitive credentials, private market data, or broker integrations must be supplied by the student.
 
+## Scope / decision gate
+The mixed-asset workflow remains the default path for the dissertation. The new per-asset and optional 20-stock equity universe flows are additive experiment tracks that reuse the same walk-forward protocol and feature set. Use them when you want asset-specific diagnostics or a broader equity cross-section; otherwise stick with the baseline panel workflow for continuity with earlier results.
+
 ## Repository Structure
 ```
 ├── data/
@@ -138,6 +141,40 @@ Key points for hosted notebooks:
 - Keep API keys in environment variables or secret managers. Never hard-code credentials into
   notebooks before sharing or committing them.
 
+## Per-asset evaluation (4-asset universe)
+Run the existing iterations per ticker while keeping the same walk-forward settings and feature set:
+```bash
+python -m src.data.download_data --tickers AAPL EURUSD=X XAUUSD=X ^GSPC --start 2013-01-01 --end 2023-12-31 --provider alpha_vantage
+python -m src.data.align_data --tickers AAPL EURUSD=X XAUUSD=X ^GSPC
+python -m src.features.engineer_features
+python -m src.experiments.per_asset_evaluation
+```
+The `--tickers`/`--ticker-file` flags on `align_data` let you restrict alignment without altering the default mixed-asset behaviour.
+
+## Optional 20-stock S&P 500 experiment
+Sample a reproducible equity universe, download data, align only those tickers, engineer features, and run per-stock reports:
+```bash
+python -m src.experiments.download_equity_universe --n 20 --start 2013-01-01 --end 2023-12-31 --provider yfinance
+python -m src.data.align_data --ticker-file data/reference/equity_universe_20.txt
+python -m src.features.engineer_features
+python -m src.experiments.per_asset_equity_evaluation
+```
+Ticker lists are stored under `data/reference/`, with aligned data in `data/processed/` and plots in `reports/figures/`. The mixed-asset workflow stays unchanged if you skip these optional steps.
+
+## Config-driven runner (application layer)
+Use the lightweight runner to drive the same pipelines from a config file:
+```bash
+python -m src.experiments.run_pipeline --config configs/universe.yaml
+```
+Adjust `configs/universe.yaml` to choose `mode` (`core4`, `sp500_sample`, or `custom`), provider, dates, and optional tags for outputs. The runner appends tags to report filenames when `--tag` is supplied, leaving defaults unchanged otherwise.
+
+## Streamlit UI (optional visualisation)
+Launch a simple UI to trigger the runner and view existing reports/figures:
+```bash
+streamlit run app/streamlit_app.py
+```
+The UI is for demonstration/visualisation only; dissertation results should continue to use the deterministic CLI flows above.
+
 ## Iteration Roadmap
 1. **Iteration 1 – Linear Baselines:** Persistence, linear regression, and logistic regression models validate the pipeline and establish benchmark metrics.
 2. **Iteration 1.1 – SVR Baseline:** Extends Iteration 1 with an RBF Support Vector Regressor to benchmark kernel-based nonlinearity against the linear regressor on identical walk-forward splits.
@@ -155,6 +192,7 @@ Robustness is evaluated via chronological walk-forward validation across all ass
 - **Order book / Level 2 feeds:** Insert broker API credentials (Interactive Brokers TWS, Alpaca) where the TODO markers appear. Store keys securely (environment variables, secrets manager).
 - **Sentiment APIs:** Add keys for Twitter, news providers, or alternative sentiment platforms via `os.environ["SENTIMENT_API_KEY"]`.
 - **Execution / Trading APIs:** Connect the VWAP/TWAP planners to broker SDKs once paper trading permissions are granted.
+- **Security:** Keep secrets in environment variables or a local `.env` file (already ignored in version control). Never commit credentials, and rotate any key that may have been exposed.
 
 ### TODO checklist (API and private data wiring)
 - `src/data/download_data.py::fetch_orderbook_snapshot`: replace the commented Alpaca placeholders (`APCA-API-KEY-ID`, `APCA-API-SECRET-KEY`) and return live Level 2 depth.
