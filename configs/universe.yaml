@@ -1,0 +1,17 @@
+provider: "yfinance"
+start: "2013-01-01"
+end: "2023-12-31"
+mode: "core4"  # core4 | sp500_sample | custom
+tickers:
+  - "AAPL"
+  - "EURUSD=X"
+  - "XAUUSD=X"
+  - "^GSPC"
+sp500:
+  n: 20
+  sector: null
+  price_min: null
+  price_max: null
+evaluation:
+  per_asset: true
+  per_stock_equity: false

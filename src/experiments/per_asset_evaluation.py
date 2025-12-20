@@ -98,6 +98,12 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         default=REPORTS_DIR / "per_asset_metrics.md",
         help="Where to write the markdown summary.",
     )
+    parser.add_argument(
+        "--tag",
+        type=str,
+        default=None,
+        help="Optional tag to append to output filenames (e.g., '_it' -> per_asset_metrics_it.csv).",
+    )
     return parser.parse_args(args)
 
 
@@ -183,9 +189,17 @@ def main(cmd_args: Optional[List[str]] = None) -> None:
         raise RuntimeError("No metrics computed; check input data.")
 
     metrics_df = pd.DataFrame(records)
-    metrics_df.to_csv(ns.output_csv, index=False)
+    output_csv = ns.output_csv
+    output_md = ns.output_md
+    figure_path = FIGURES_DIR / "per_asset_directional_accuracy.png"
+    if ns.tag:
+        output_csv = output_csv.with_stem(f"{output_csv.stem}_{ns.tag}")
+        output_md = output_md.with_stem(f"{output_md.stem}_{ns.tag}")
+        figure_path = figure_path.with_stem(f"{figure_path.stem}_{ns.tag}")
 
-    markdown_path = ns.output_md
+    metrics_df.to_csv(output_csv, index=False)
+
+    markdown_path = output_md
     markdown_path.parent.mkdir(parents=True, exist_ok=True)
     markdown_lines = [
         "# Per-Asset Evaluation Metrics",
@@ -196,8 +210,8 @@ def main(cmd_args: Optional[List[str]] = None) -> None:
     ]
     markdown_path.write_text("\n".join(markdown_lines))
 
-    plot_directional_accuracy(metrics_df, FIGURES_DIR / "per_asset_directional_accuracy.png")
-    LOGGER.info("Saved per-asset metrics to %s and %s", ns.output_csv, ns.output_md)
+    plot_directional_accuracy(metrics_df, figure_path)
+    LOGGER.info("Saved per-asset metrics to %s and %s", output_csv, markdown_path)
 
 
 if __name__ == "__main__":

@@ -161,6 +161,20 @@ python -m src.experiments.per_asset_equity_evaluation
 ```
 Ticker lists are stored under `data/reference/`, with aligned data in `data/processed/` and plots in `reports/figures/`. The mixed-asset workflow stays unchanged if you skip these optional steps.
 
+## Config-driven runner (application layer)
+Use the lightweight runner to drive the same pipelines from a config file:
+```bash
+python -m src.experiments.run_pipeline --config configs/universe.yaml
+```
+Adjust `configs/universe.yaml` to choose `mode` (`core4`, `sp500_sample`, or `custom`), provider, dates, and optional tags for outputs. The runner appends tags to report filenames when `--tag` is supplied, leaving defaults unchanged otherwise.
+
+## Streamlit UI (optional visualisation)
+Launch a simple UI to trigger the runner and view existing reports/figures:
+```bash
+streamlit run app/streamlit_app.py
+```
+The UI is for demonstration/visualisation only; dissertation results should continue to use the deterministic CLI flows above.
+
 ## Iteration Roadmap
 1. **Iteration 1 – Linear Baselines:** Persistence, linear regression, and logistic regression models validate the pipeline and establish benchmark metrics.
 2. **Iteration 1.1 – SVR Baseline:** Extends Iteration 1 with an RBF Support Vector Regressor to benchmark kernel-based nonlinearity against the linear regressor on identical walk-forward splits.
