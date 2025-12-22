@@ -66,7 +66,7 @@ def run_core4(cfg: dict, tag: Optional[str]) -> None:
     run_align(tickers=tickers)
     run_engineer_features()
     if cfg.get("evaluation", {}).get("per_asset", True):
-        run_per_asset(["--tag", tag] if tag else None)
+        run_per_asset(["--tag", tag] if tag else [])
 
 
 def run_custom(cfg: dict, tag: Optional[str]) -> None:
@@ -75,7 +75,7 @@ def run_custom(cfg: dict, tag: Optional[str]) -> None:
     run_align(tickers=tickers)
     run_engineer_features()
     if cfg.get("evaluation", {}).get("per_asset", True):
-        run_per_asset(["--tag", tag] if tag else None)
+        run_per_asset(["--tag", tag] if tag else [])
 
 
 def run_sp500(cfg: dict, tag: Optional[str]) -> None:
@@ -92,7 +92,7 @@ def run_sp500(cfg: dict, tag: Optional[str]) -> None:
     run_align(ticker_file=universe_path)
     run_engineer_features()
     if cfg.get("evaluation", {}).get("per_stock_equity", True):
-        per_equity_args = ["--tag", tag] if tag else None
+        per_equity_args = ["--tag", tag] if tag else []
         run_per_equity(per_equity_args)
 
 
