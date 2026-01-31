@@ -7,20 +7,23 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import seaborn as sns
 
+from src.evaluation.metrics import directional_accuracy
+from src.evaluation.walkforward import aggregate_metrics, walk_forward_splits
 from src.models.iteration1_1_svr import run_iteration as run_iteration_1_1
 from src.models.iteration1_baseline import run_iteration as run_iteration_1
 from src.models.iteration2_1_lightgbm import run_iteration as run_iteration_2_1
 from src.models.iteration2_ensemble import run_iteration as run_iteration_2
 from src.models.iteration3_lstm import run_iteration as run_iteration_3
 from src.models.iteration5_meta_ensemble import run_iteration as run_iteration_5
-from src.utils import PROCESSED_DIR, PROJECT_ROOT, REFERENCE_DIR, ensure_directories
+from src.utils import FIGURES_DIR, PROCESSED_DIR, PROJECT_ROOT, REFERENCE_DIR, ensure_directories
 
 LOGGER = logging.getLogger(__name__)
 
-IterationRunner = Callable[..., Dict[str, float]]
+IterationRunner = Callable[..., tuple[pd.DataFrame, pd.DataFrame]]
 
 ITERATION_CONFIGS = [
     (
@@ -163,6 +166,85 @@ def slugify_iteration(iteration_id: str) -> str:
     return iteration_id.replace(".", "_")
 
 
+def compute_persistence_accuracy(df: pd.DataFrame) -> float:
+    if df.empty:
+        return float("nan")
+    return directional_accuracy(df["next_day_return"].values, df["return_1d"].values)
+
+
+def plot_walk_forward_schematic(output_path: Path, n_splits: int = 5, train_min_period: int = 252, total_periods: int = 1000) -> None:
+    if total_periods <= train_min_period:
+        total_periods = train_min_period + n_splits * 10
+    dummy = pd.DataFrame({"value": np.arange(total_periods)})
+
+    fig, ax = plt.subplots(figsize=(12, 4))
+    y_height = 8
+    y_gap = 4
+    for split_id, (train_idx, test_idx) in enumerate(
+        walk_forward_splits(dummy, n_splits=n_splits, train_min_period=train_min_period), start=1
+    ):
+        y_base = split_id * (y_height + y_gap)
+        train_start = train_idx[0]
+        train_width = train_idx[-1] - train_idx[0] + 1
+        test_start = test_idx[0]
+        test_width = test_idx[-1] - test_idx[0] + 1
+        ax.broken_barh([(train_start, train_width)], (y_base, y_height), facecolors="#4C72B0", label="Train" if split_id == 1 else "")
+        ax.broken_barh([(test_start, test_width)], (y_base, y_height), facecolors="#DD8452", label="Test" if split_id == 1 else "")
+
+    ax.set_xlabel("Time index")
+    ax.set_ylabel("Split")
+    ax.set_yticks(
+        [(split_id * (y_height + y_gap)) + y_height / 2 for split_id in range(1, n_splits + 1)],
+        labels=[f"Split {split_id}" for split_id in range(1, n_splits + 1)],
+    )
+    ax.set_title("Walk-Forward Split Schematic")
+    ax.legend(loc="upper right")
+    fig.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, bbox_inches="tight")
+    plt.close(fig)
+
+
+def build_improvement_tables(df: pd.DataFrame) -> str:
+    lines = ["# Directional Accuracy Improvement vs Persistence", ""]
+    for iteration in sorted(df["iteration"].unique(), key=lambda val: float(val)):
+        subset = df[df["iteration"] == iteration].copy()
+        subset["accuracy_delta"] = subset["directional_accuracy"] - subset["persistence_accuracy"]
+        subset = subset.sort_values("accuracy_delta", ascending=False)
+
+        top5 = subset.head(5)
+        bottom5 = subset.tail(5).sort_values("accuracy_delta")
+
+        lines.append(f"## Iteration {iteration}")
+        lines.append("")
+        lines.append("### Top 5 Improvements")
+        lines.append("")
+        lines.append(top5[["ticker", "directional_accuracy", "persistence_accuracy", "accuracy_delta"]].to_markdown(index=False))
+        lines.append("")
+        lines.append("### Bottom 5 Improvements")
+        lines.append("")
+        lines.append(bottom5[["ticker", "directional_accuracy", "persistence_accuracy", "accuracy_delta"]].to_markdown(index=False))
+        lines.append("")
+    return "\n".join(lines)
+
+
+def save_improvement_tables(df: pd.DataFrame, output_path: Path) -> None:
+    if df.empty or "directional_accuracy" not in df:
+        LOGGER.warning("Skipping improvement tables due to missing directional accuracy data.")
+        return
+    content = build_improvement_tables(df)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(content)
+    for iteration in sorted(df["iteration"].unique(), key=lambda val: float(val)):
+        subset = df[df["iteration"] == iteration].copy()
+        subset["accuracy_delta"] = subset["directional_accuracy"] - subset["persistence_accuracy"]
+        subset = subset.sort_values("accuracy_delta", ascending=False)
+        top5 = subset.head(5)
+        bottom5 = subset.tail(5).sort_values("accuracy_delta")
+        LOGGER.info("Iteration %s top 5 improvement tickers: %s", iteration, ", ".join(top5["ticker"].tolist()))
+        LOGGER.info("Iteration %s bottom 5 improvement tickers: %s", iteration, ", ".join(bottom5["ticker"].tolist()))
+
+
 def plot_accuracy_heatmap(df: pd.DataFrame, output_path: Path) -> None:
     pivot = df.pivot(index="ticker", columns="iteration", values="directional_accuracy")
     if pivot.empty:
@@ -212,10 +294,16 @@ def evaluate_ticker(ticker: str, df: pd.DataFrame) -> List[Dict[str, object]]:
     if ticker_df.empty:
         LOGGER.warning("No data available for %s; skipping.", ticker)
         return []
+    if len(ticker_df) < 252:
+        LOGGER.warning("Skipping %s due to insufficient history (%d rows).", ticker, len(ticker_df))
+        return []
+
+    persistence_accuracy = compute_persistence_accuracy(ticker_df)
 
     records: List[Dict[str, object]] = []
     for iteration_id, iteration_label, runner, mapping in ITERATION_CONFIGS:
-        summary = runner(df=ticker_df, generate_reports=False, ticker=ticker)
+        metrics_df, _ = runner(data=ticker_df, generate_reports=False, ticker=ticker)
+        summary = aggregate_metrics(metrics_df.to_dict("records"))
         metrics = extract_metrics(summary, mapping)
         if all(value is None for value in metrics.values()):
             LOGGER.info("Skipping iteration %s for %s due to missing metrics.", iteration_id, ticker)
@@ -225,6 +313,10 @@ def evaluate_ticker(ticker: str, df: pd.DataFrame) -> List[Dict[str, object]]:
                 "ticker": ticker,
                 "iteration": iteration_id,
                 "iteration_label": iteration_label,
+                "persistence_accuracy": persistence_accuracy,
+                "accuracy_delta": (metrics.get("directional_accuracy") - persistence_accuracy)
+                if metrics.get("directional_accuracy") is not None
+                else None,
                 **metrics,
             }
         )
@@ -238,7 +330,7 @@ def main(cmd_args: Optional[List[str]] = None) -> None:
     feature_df = load_features(ns.features_path)
     universe_path = resolve_universe_file(ns.universe_file)
     tickers = select_tickers(feature_df, universe_path, ns.tickers)
-    ensure_directories(ns.output_dir)
+    ensure_directories(ns.output_dir, FIGURES_DIR)
 
     records: List[Dict[str, object]] = []
     for ticker in tickers:
@@ -258,6 +350,9 @@ def main(cmd_args: Optional[List[str]] = None) -> None:
     plot_accuracy_heatmap(metrics_df, heatmap_path)
     plot_accuracy_boxplot(metrics_df, boxplot_path)
     plot_iteration_bars(metrics_df, ns.output_dir)
+    plot_walk_forward_schematic(FIGURES_DIR / "walk_forward_splits.png")
+
+    save_improvement_tables(metrics_df, ns.output_dir / "directional_accuracy_delta_tables.md")
 
     LOGGER.info("Saved metrics to %s", output_csv)
 

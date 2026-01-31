@@ -81,12 +81,12 @@ def pairs_spread_signal(asset_a: pd.Series, asset_b: pd.Series) -> float:
 
 
 def run_iteration(
-    df: Optional[pd.DataFrame] = None,
+    data: Optional[pd.DataFrame] = None,
     report_path: Optional[Path] = None,
     generate_reports: bool = True,
     ticker: Optional[str] = None,
-) -> Dict[str, float]:
-    df = load_dataset(df)
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    df = load_dataset(data)
     features = feature_columns(df)
 
     records: List[Dict[str, float]] = []
@@ -251,7 +251,8 @@ def run_iteration(
 
     suffix = f" for {ticker}" if ticker else ""
     LOGGER.info("Iteration 5 summary%s: %s", suffix, summary)
-    return summary
+    predictions_df = pd.concat(prediction_frames, ignore_index=True) if prediction_frames else pd.DataFrame()
+    return metrics_df, predictions_df
 
 
 def main() -> Tuple[pd.DataFrame, pd.DataFrame]:
