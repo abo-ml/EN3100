@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 from sklearn.preprocessing import StandardScaler
 
@@ -13,7 +14,7 @@ from src.evaluation.metrics import directional_accuracy, mae, r2, rmse
 from src.evaluation.reporting import save_metrics_report
 from src.evaluation.walkforward import aggregate_metrics, walk_forward_splits
 from src.models.iteration1_baseline import feature_columns, load_dataset
-from src.models.iteration3_lstm import create_sequences
+from src.models.iteration3_lstm import create_sequences, create_sequences_with_index
 from src.utils import REPORTS_DIR
 
 SEED = 42
@@ -67,11 +68,17 @@ def build_transformer_model(input_shape: Tuple[int, int]) -> tf.keras.Model:
     return model
 
 
-def run_iteration() -> Dict[str, float]:
-    df = load_dataset()
+def run_iteration(
+    data: Optional[pd.DataFrame] = None,
+    report_path: Optional[Path] = None,
+    generate_reports: bool = True,
+    ticker: Optional[str] = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    df = load_dataset(data)
     features = feature_columns(df)
 
-    records = []
+    records: List[Dict[str, float]] = []
+    prediction_frames: List[pd.DataFrame] = []
 
     for split_id, (train_idx, test_idx) in enumerate(walk_forward_splits(df, n_splits=3, train_min_period=252), start=1):
         train = df.iloc[train_idx].copy()
@@ -82,7 +89,7 @@ def run_iteration() -> Dict[str, float]:
         test[features] = scaler.transform(test[features])
 
         X_train, y_train = create_sequences(train, features, "next_day_return", WINDOW)
-        X_test, y_test = create_sequences(test, features, "next_day_return", WINDOW)
+        X_test, y_test, test_indices = create_sequences_with_index(test, features, "next_day_return", WINDOW)
 
         if X_train.size == 0 or X_test.size == 0:
             LOGGER.warning("Insufficient sequence data for split %s", split_id)
@@ -107,14 +114,23 @@ def run_iteration() -> Dict[str, float]:
             "directional_accuracy_transformer": directional_accuracy(y_test, y_pred),
         }
         records.append(record)
+        if test_indices:
+            pred_slice = test.loc[test_indices, ["date", "ticker"]].copy()
+            pred_slice["actual"] = y_test
+            pred_slice["predicted"] = y_pred
+            prediction_frames.append(pred_slice)
 
+    metrics_df = pd.DataFrame(records)
     summary = aggregate_metrics(records)
-    save_metrics_report(summary, REPORT_PATH)
-    LOGGER.info("Iteration 4 summary: %s", summary)
-    return summary
+    if generate_reports:
+        save_metrics_report(summary, report_path or REPORT_PATH)
+    suffix = f" for {ticker}" if ticker else ""
+    LOGGER.info("Iteration 4 summary%s: %s", suffix, summary)
+    predictions_df = pd.concat(prediction_frames, ignore_index=True) if prediction_frames else pd.DataFrame()
+    return metrics_df, predictions_df
 
 
-def main() -> Dict[str, float]:
+def main() -> Tuple[pd.DataFrame, pd.DataFrame]:
     return run_iteration()
 
 

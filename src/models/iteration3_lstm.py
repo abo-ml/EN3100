@@ -81,7 +81,8 @@ def run_iteration(
     df = load_dataset(df)
     features = feature_columns(df)
 
-    records = []
+    records: List[Dict[str, float]] = []
+    prediction_frames: List[pd.DataFrame] = []
 
     for split_id, (train_idx, test_idx) in enumerate(walk_forward_splits(df, n_splits=3, train_min_period=252), start=1):
         train = df.iloc[train_idx].copy()
@@ -92,9 +93,9 @@ def run_iteration(
         test[features] = scaler.transform(test[features])
 
         X_train, y_train = create_sequences(train, features, "next_day_return", WINDOW)
-        X_test, y_test = create_sequences(test, features, "next_day_return", WINDOW)
+        X_test, y_test, test_indices = create_sequences_with_index(test, features, "next_day_return", WINDOW)
         _, y_train_cls = create_sequences(train, features, "target_direction", WINDOW)
-        _, y_test_cls = create_sequences(test, features, "target_direction", WINDOW)
+        _, y_test_cls, _ = create_sequences_with_index(test, features, "target_direction", WINDOW)
 
         if X_train.size == 0 or X_test.size == 0:
             LOGGER.warning("Insufficient sequence data for split %s", split_id)
@@ -133,7 +134,13 @@ def run_iteration(
             "classification_accuracy": (class_pred == y_test_cls).mean() if y_test_cls.size else np.nan,
         }
         records.append(record)
+        if test_indices:
+            pred_slice = test.loc[test_indices, ["date", "ticker"]].copy()
+            pred_slice["actual"] = y_test
+            pred_slice["predicted"] = y_pred
+            prediction_frames.append(pred_slice)
 
+    metrics_df = pd.DataFrame(records)
     summary = aggregate_metrics(records)
     if generate_reports:
         save_metrics_report(summary, report_path or REPORT_PATH)
@@ -142,7 +149,7 @@ def run_iteration(
     return summary
 
 
-def main() -> Dict[str, float]:
+def main() -> Tuple[pd.DataFrame, pd.DataFrame]:
     return run_iteration()
 
 

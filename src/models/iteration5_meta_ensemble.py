@@ -89,9 +89,10 @@ def run_iteration(
     df = load_dataset(df)
     features = feature_columns(df)
 
-    records = []
+    records: List[Dict[str, float]] = []
     equity_curves = []
     strategy_return_frames = []
+    prediction_frames: List[pd.DataFrame] = []
 
     for split_id, (train_idx, test_idx) in enumerate(walk_forward_splits(df, n_splits=3, train_min_period=252), start=1):
         train = df.iloc[train_idx].copy()
@@ -199,6 +200,7 @@ def run_iteration(
         test_df["actual_return"] = test.loc[test_df["row_index"], "next_day_return"].values
         test_df["volatility"] = test.loc[test_df["row_index"], "volatility_21"].values
         test_df["date"] = test.loc[test_df["row_index"], "date"].values
+        test_df["ticker"] = test.loc[test_df["row_index"], "ticker"].values
 
         position_size = np.clip(test_df["pred_return"] / (test_df["volatility"].replace(0, np.nan) + 1e-6), -MAX_LEVERAGE, MAX_LEVERAGE)
         strategy_returns = position_size * test_df["actual_return"]
@@ -213,6 +215,11 @@ def run_iteration(
             "max_drawdown": max_drawdown(strategy_returns),
         }
         records.append(record)
+        prediction_frames.append(
+            test_df[["date", "ticker", "actual_return", "pred_return"]].rename(
+                columns={"actual_return": "actual", "pred_return": "predicted"}
+            )
+        )
 
         equity_curve = (1 + strategy_returns).cumprod()
         equity_curves.append(pd.DataFrame({"date": test_df["date"], "equity": equity_curve}))
@@ -225,6 +232,7 @@ def run_iteration(
             )
         )
 
+    metrics_df = pd.DataFrame(records)
     summary = aggregate_metrics(records)
     if generate_reports:
         save_metrics_report(summary, report_path or REPORT_PATH)
@@ -246,7 +254,7 @@ def run_iteration(
     return summary
 
 
-def main() -> Dict[str, float]:
+def main() -> Tuple[pd.DataFrame, pd.DataFrame]:
     return run_iteration()
 
 
