@@ -72,34 +72,13 @@ def create_sequences(df: pd.DataFrame, features: List[str], target_col: str, win
     return np.array(sequences), np.array(targets)
 
 
-def create_sequences_with_index(
-    df: pd.DataFrame, features: List[str], target_col: str, window: int
-) -> Tuple[np.ndarray, np.ndarray, List[int]]:
-    sequences = []
-    targets = []
-    indices = []
-    for _, group in df.groupby("ticker"):
-        feature_array = group[features].values
-        target_array = group[target_col].values
-        group_indices = group.index.values
-        if len(group) <= window:
-            continue
-        for i in range(window, len(group)):
-            sequences.append(feature_array[i - window : i])
-            targets.append(target_array[i])
-            indices.append(group_indices[i])
-    if not sequences:
-        return np.empty((0, window, len(features))), np.empty((0,)), []
-    return np.array(sequences), np.array(targets), indices
-
-
 def run_iteration(
-    data: Optional[pd.DataFrame] = None,
+    df: Optional[pd.DataFrame] = None,
     report_path: Optional[Path] = None,
     generate_reports: bool = True,
     ticker: Optional[str] = None,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    df = load_dataset(data)
+) -> Dict[str, float]:
+    df = load_dataset(df)
     features = feature_columns(df)
 
     records: List[Dict[str, float]] = []
@@ -167,8 +146,7 @@ def run_iteration(
         save_metrics_report(summary, report_path or REPORT_PATH)
     suffix = f" for {ticker}" if ticker else ""
     LOGGER.info("Iteration 3 summary%s: %s", suffix, summary)
-    predictions_df = pd.concat(prediction_frames, ignore_index=True) if prediction_frames else pd.DataFrame()
-    return metrics_df, predictions_df
+    return summary
 
 
 def main() -> Tuple[pd.DataFrame, pd.DataFrame]:

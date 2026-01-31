@@ -16,12 +16,11 @@ from src.models.iteration2_1_lightgbm import run_iteration as run_iteration_2_1
 from src.models.iteration2_ensemble import run_iteration as run_iteration_2
 from src.models.iteration3_lstm import run_iteration as run_iteration_3
 from src.models.iteration5_meta_ensemble import run_iteration as run_iteration_5
-from src.evaluation.walkforward import aggregate_metrics
 from src.utils import PROCESSED_DIR, PROJECT_ROOT, REFERENCE_DIR, ensure_directories
 
 LOGGER = logging.getLogger(__name__)
 
-IterationRunner = Callable[..., tuple[pd.DataFrame, pd.DataFrame]]
+IterationRunner = Callable[..., Dict[str, float]]
 
 ITERATION_CONFIGS = [
     (
@@ -216,8 +215,7 @@ def evaluate_ticker(ticker: str, df: pd.DataFrame) -> List[Dict[str, object]]:
 
     records: List[Dict[str, object]] = []
     for iteration_id, iteration_label, runner, mapping in ITERATION_CONFIGS:
-        metrics_df, _ = runner(data=ticker_df, generate_reports=False, ticker=ticker)
-        summary = aggregate_metrics(metrics_df.to_dict("records"))
+        summary = runner(df=ticker_df, generate_reports=False, ticker=ticker)
         metrics = extract_metrics(summary, mapping)
         if all(value is None for value in metrics.values()):
             LOGGER.info("Skipping iteration %s for %s due to missing metrics.", iteration_id, ticker)
