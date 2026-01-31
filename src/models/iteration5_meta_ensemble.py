@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -80,8 +80,13 @@ def pairs_spread_signal(asset_a: pd.Series, asset_b: pd.Series) -> float:
     return float(z_score.iloc[-1])
 
 
-def run_iteration() -> Dict[str, float]:
-    df = load_dataset()
+def run_iteration(
+    df: Optional[pd.DataFrame] = None,
+    report_path: Optional[Path] = None,
+    generate_reports: bool = True,
+    ticker: Optional[str] = None,
+) -> Dict[str, float]:
+    df = load_dataset(df)
     features = feature_columns(df)
 
     records = []
@@ -221,7 +226,8 @@ def run_iteration() -> Dict[str, float]:
         )
 
     summary = aggregate_metrics(records)
-    save_metrics_report(summary, REPORT_PATH)
+    if generate_reports:
+        save_metrics_report(summary, report_path or REPORT_PATH)
 
     if strategy_return_frames:
         combined_returns = pd.concat(strategy_return_frames).sort_values("date")
@@ -235,7 +241,8 @@ def run_iteration() -> Dict[str, float]:
         combined = pd.concat(equity_curves).sort_values("date")
         plot_equity_curve(combined["date"], combined["equity"], "Iteration 5 Equity Curve", "iteration5_equity_curve.png")
 
-    LOGGER.info("Iteration 5 summary: %s", summary)
+    suffix = f" for {ticker}" if ticker else ""
+    LOGGER.info("Iteration 5 summary%s: %s", suffix, summary)
     return summary
 
 
