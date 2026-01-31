@@ -2,10 +2,15 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
+import platform
+import sys
+from importlib import metadata
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -13,6 +18,7 @@ import seaborn as sns
 
 from src.evaluation.metrics import directional_accuracy
 from src.evaluation.walkforward import aggregate_metrics, walk_forward_splits
+from src.models import iteration1_1_svr, iteration1_baseline, iteration2_1_lightgbm, iteration2_ensemble, iteration3_lstm, iteration5_meta_ensemble
 from src.models.iteration1_1_svr import run_iteration as run_iteration_1_1
 from src.models.iteration1_baseline import run_iteration as run_iteration_1
 from src.models.iteration2_1_lightgbm import run_iteration as run_iteration_2_1
@@ -289,6 +295,122 @@ def plot_iteration_bars(df: pd.DataFrame, output_dir: Path) -> None:
         plt.close(fig)
 
 
+def compute_iteration_summary(df: pd.DataFrame, metrics: List[str]) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame()
+    records: List[Dict[str, object]] = []
+    for iteration, group in df.groupby("iteration", sort=False):
+        for metric in metrics:
+            series = group[metric].dropna()
+            count = int(series.count())
+            mean = float(series.mean()) if count else float("nan")
+            median = float(series.median()) if count else float("nan")
+            std = float(series.std(ddof=1)) if count > 1 else float("nan")
+            ci = 1.96 * std / np.sqrt(count) if count > 1 else float("nan")
+            records.append(
+                {
+                    "iteration": iteration,
+                    "metric": metric,
+                    "count": count,
+                    "mean": mean,
+                    "median": median,
+                    "std": std,
+                    "ci95_half_width": ci,
+                    "ci95_lower": mean - ci if count > 1 else float("nan"),
+                    "ci95_upper": mean + ci if count > 1 else float("nan"),
+                }
+            )
+    return pd.DataFrame(records)
+
+
+def plot_iteration_mean_ci(summary_df: pd.DataFrame, output_path: Path) -> None:
+    if summary_df.empty:
+        LOGGER.warning("Skipping iteration mean/CI plot due to empty summary.")
+        return
+    metrics = ["directional_accuracy", "rmse", "mae", "r2"]
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+    axes = axes.ravel()
+    iteration_order = sorted(summary_df["iteration"].unique().tolist(), key=lambda val: float(val))
+    for ax, metric in zip(axes, metrics):
+        subset = summary_df[summary_df["metric"] == metric].copy()
+        subset = subset.set_index("iteration").reindex(iteration_order).reset_index()
+        ax.errorbar(
+            subset["iteration"],
+            subset["mean"],
+            yerr=subset["ci95_half_width"],
+            fmt="o-",
+            capsize=4,
+        )
+        ax.set_title(f"{metric} mean ± 95% CI")
+        ax.set_xlabel("Iteration")
+        ax.set_ylabel(metric)
+    fig.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, bbox_inches="tight")
+    plt.close(fig)
+
+
+def export_pivot_tables(df: pd.DataFrame, output_dir: Path) -> None:
+    if df.empty:
+        LOGGER.warning("Skipping pivot tables due to empty metrics data.")
+        return
+    accuracy_pivot = df.pivot(index="ticker", columns="iteration", values="directional_accuracy")
+    rmse_pivot = df.pivot(index="ticker", columns="iteration", values="rmse")
+    accuracy_pivot.to_csv(output_dir / "directional_accuracy_pivot.csv")
+    rmse_pivot.to_csv(output_dir / "rmse_pivot.csv")
+
+
+def get_package_version(package_name: str) -> str:
+    try:
+        return metadata.version(package_name)
+    except metadata.PackageNotFoundError:
+        return "not-installed"
+
+
+def build_run_metadata(
+    features_path: Path,
+    tickers: List[str],
+    feature_df: pd.DataFrame,
+) -> Dict[str, object]:
+    date_ranges = (
+        feature_df[feature_df["ticker"].isin(tickers)]
+        .groupby("ticker")["date"]
+        .agg(["min", "max"])
+        .reset_index()
+    )
+    ticker_dates = {
+        row["ticker"]: {"start_date": row["min"].date().isoformat(), "end_date": row["max"].date().isoformat()}
+        for _, row in date_ranges.iterrows()
+    }
+    random_seeds = {
+        "iteration_1": iteration1_baseline.SEED,
+        "iteration_1_1": iteration1_1_svr.SEED,
+        "iteration_2": 42,
+        "iteration_2_1": iteration2_1_lightgbm.SEED,
+        "iteration_3": iteration3_lstm.SEED,
+        "iteration_5": iteration5_meta_ensemble.SEED,
+    }
+    library_versions = {
+        "python": sys.version,
+        "numpy": np.__version__,
+        "pandas": pd.__version__,
+        "matplotlib": matplotlib.__version__,
+        "seaborn": sns.__version__,
+        "scikit-learn": get_package_version("scikit-learn"),
+        "lightgbm": get_package_version("lightgbm"),
+        "tensorflow": get_package_version("tensorflow"),
+        "xgboost": get_package_version("xgboost"),
+        "platform": platform.platform(),
+    }
+    return {
+        "features_path": str(features_path),
+        "tickers": tickers,
+        "ticker_date_ranges": ticker_dates,
+        "library_versions": library_versions,
+        "random_seeds": random_seeds,
+    }
+
+
 def evaluate_ticker(ticker: str, df: pd.DataFrame) -> List[Dict[str, object]]:
     ticker_df = df[df["ticker"] == ticker].reset_index(drop=True)
     if ticker_df.empty:
@@ -345,14 +467,26 @@ def main(cmd_args: Optional[List[str]] = None) -> None:
     output_csv = ns.output_dir / "ticker_iteration_metrics.csv"
     metrics_df.to_csv(output_csv, index=False)
 
+    export_pivot_tables(metrics_df, ns.output_dir)
+
+    summary_metrics = ["directional_accuracy", "rmse", "mae", "r2"]
+    summary_df = compute_iteration_summary(metrics_df, summary_metrics)
+    summary_path = ns.output_dir / "iteration_summary.csv"
+    summary_df.to_csv(summary_path, index=False)
+
     heatmap_path = ns.output_dir / "accuracy_heatmap.png"
     boxplot_path = ns.output_dir / "accuracy_boxplot.png"
     plot_accuracy_heatmap(metrics_df, heatmap_path)
     plot_accuracy_boxplot(metrics_df, boxplot_path)
     plot_iteration_bars(metrics_df, ns.output_dir)
+    plot_iteration_mean_ci(summary_df, ns.output_dir / "iteration_mean_ci.png")
     plot_walk_forward_schematic(FIGURES_DIR / "walk_forward_splits.png")
 
     save_improvement_tables(metrics_df, ns.output_dir / "directional_accuracy_delta_tables.md")
+
+    metadata = build_run_metadata(ns.features_path, tickers, feature_df)
+    metadata_path = ns.output_dir / "run_metadata.json"
+    metadata_path.write_text(json.dumps(metadata, indent=2))
 
     LOGGER.info("Saved metrics to %s", output_csv)
 
