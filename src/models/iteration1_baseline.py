@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 from sklearn.linear_model import LinearRegression, LogisticRegression
@@ -44,21 +44,19 @@ def feature_columns(df: pd.DataFrame) -> List[str]:
 
 
 def run_iteration(
-    df: Optional[pd.DataFrame] = None,
+    data: Optional[pd.DataFrame] = None,
     report_path: Optional[Path] = None,
     generate_reports: bool = True,
     ticker: Optional[str] = None,
-) -> Dict[str, float]:
-    dataset = load_dataset(df)
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    dataset = load_dataset(data)
     features = feature_columns(dataset)
 
     linear_model = LinearRegression()
     classifier = LogisticRegression(max_iter=1000, random_state=SEED)
 
-    records = []
-    predictions_accum = []
-    actuals_accum = []
-    dates_accum = []
+    records: List[Dict[str, float]] = []
+    prediction_records: List[Dict[str, object]] = []
 
     for split_id, (train_idx, test_idx) in enumerate(
         walk_forward_splits(dataset, n_splits=5, train_min_period=252), start=1
@@ -90,30 +88,38 @@ def run_iteration(
             "directional_accuracy_persistence": directional_accuracy(y_test, persistence_pred),
         }
         records.append(record)
+        prediction_records.extend(
+            {
+                "date": date,
+                "ticker": tick,
+                "actual": actual,
+                "predicted": pred,
+            }
+            for date, tick, actual, pred in zip(test["date"].values, test["ticker"].values, y_test.values, y_pred)
+        )
 
-        predictions_accum.extend(y_pred)
-        actuals_accum.extend(y_test.values)
-        dates_accum.extend(test["date"].values)
-
+    metrics_df = pd.DataFrame(records)
     summary = aggregate_metrics(records)
     if generate_reports:
         save_metrics_report(summary, report_path or REPORT_PATH)
 
-        if predictions_accum:
+        if prediction_records:
+            pred_df = pd.DataFrame(prediction_records)
             plot_pred_vs_actual(
-                dates=pd.Series(dates_accum),
-                actual=pd.Series(actuals_accum),
-                predicted=pd.Series(predictions_accum),
+                dates=pd.Series(pred_df["date"]),
+                actual=pd.Series(pred_df["actual"]),
+                predicted=pd.Series(pred_df["predicted"]),
                 title="Iteration 1: Actual vs Predicted",
                 filename=PRED_FIG,
             )
 
     suffix = f" for {ticker}" if ticker else ""
     LOGGER.info("Iteration 1 summary%s: %s", suffix, summary)
-    return summary
+    predictions_df = pd.DataFrame(prediction_records)
+    return metrics_df, predictions_df
 
 
-def main() -> Dict[str, float]:
+def main() -> Tuple[pd.DataFrame, pd.DataFrame]:
     return run_iteration()
 
 

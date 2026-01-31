@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -61,16 +61,17 @@ def fit_xgb(X_train, y_train):
 
 
 def run_iteration(
-    df: Optional[pd.DataFrame] = None,
+    data: Optional[pd.DataFrame] = None,
     report_path: Optional[Path] = None,
     generate_reports: bool = True,
     ticker: Optional[str] = None,
-) -> Dict[str, float]:
-    dataset = load_dataset(df)
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    dataset = load_dataset(data)
     features = feature_columns(dataset)
 
     rf_importances = []
-    records = []
+    records: List[Dict[str, float]] = []
+    prediction_records: List[Dict[str, object]] = []
 
     for split_id, (train_idx, test_idx) in enumerate(
         walk_forward_splits(dataset, n_splits=5, train_min_period=252), start=1
@@ -113,7 +114,18 @@ def run_iteration(
                 }
             )
         records.append(record)
+        prediction_records.extend(
+            {
+                "date": date,
+                "ticker": tick,
+                "actual": actual,
+                "predicted": pred,
+                "model": "random_forest",
+            }
+            for date, tick, actual, pred in zip(test["date"].values, test["ticker"].values, y_test.values, rf_pred)
+        )
 
+    metrics_df = pd.DataFrame(records)
     summary = aggregate_metrics(records)
     if generate_reports:
         save_metrics_report(summary, report_path or REPORT_PATH)
@@ -126,10 +138,11 @@ def run_iteration(
 
     suffix = f" for {ticker}" if ticker else ""
     LOGGER.info("Iteration 2 summary%s: %s", suffix, summary)
-    return summary
+    predictions_df = pd.DataFrame(prediction_records)
+    return metrics_df, predictions_df
 
 
-def main() -> Dict[str, float]:
+def main() -> Tuple[pd.DataFrame, pd.DataFrame]:
     return run_iteration()
 
 
