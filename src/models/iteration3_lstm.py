@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -72,8 +72,13 @@ def create_sequences(df: pd.DataFrame, features: List[str], target_col: str, win
     return np.array(sequences), np.array(targets)
 
 
-def run_iteration() -> Dict[str, float]:
-    df = load_dataset()
+def run_iteration(
+    df: Optional[pd.DataFrame] = None,
+    report_path: Optional[Path] = None,
+    generate_reports: bool = True,
+    ticker: Optional[str] = None,
+) -> Dict[str, float]:
+    df = load_dataset(df)
     features = feature_columns(df)
 
     records = []
@@ -130,8 +135,10 @@ def run_iteration() -> Dict[str, float]:
         records.append(record)
 
     summary = aggregate_metrics(records)
-    save_metrics_report(summary, REPORT_PATH)
-    LOGGER.info("Iteration 3 summary: %s", summary)
+    if generate_reports:
+        save_metrics_report(summary, report_path or REPORT_PATH)
+    suffix = f" for {ticker}" if ticker else ""
+    LOGGER.info("Iteration 3 summary%s: %s", suffix, summary)
     return summary
 
 
