@@ -229,7 +229,7 @@ def run_iteration(
     if generate_reports:
         save_metrics_report(summary, report_path or REPORT_PATH)
 
-    if strategy_return_frames:
+    if generate_reports and strategy_return_frames:
         combined_returns = pd.concat(strategy_return_frames).sort_values("date")
         combined_returns["equity_curve"] = (1 + combined_returns["strategy_return"]).cumprod()
         PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
@@ -237,7 +237,7 @@ def run_iteration(
         combined_returns.to_csv(output_returns, index=False)
         LOGGER.info("Saved strategy returns to %s", output_returns)
 
-    if equity_curves:
+    if generate_reports and equity_curves:
         combined = pd.concat(equity_curves).sort_values("date")
         plot_equity_curve(combined["date"], combined["equity"], "Iteration 5 Equity Curve", "iteration5_equity_curve.png")
 
