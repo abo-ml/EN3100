@@ -13,6 +13,7 @@ from src.models.iteration1_1_svr import run_iteration as run_iteration_1_1
 from src.models.iteration1_baseline import run_iteration as run_iteration_1
 from src.models.iteration2_1_lightgbm import run_iteration as run_iteration_2_1
 from src.models.iteration2_ensemble import run_iteration as run_iteration_2
+from src.evaluation.walkforward import aggregate_metrics
 from src.utils import FIGURES_DIR, PROCESSED_DIR, REPORTS_DIR, ensure_directories
 
 LOGGER = logging.getLogger(__name__)
@@ -166,7 +167,8 @@ def evaluate_ticker(ticker: str, df: pd.DataFrame) -> List[Dict[str, object]]:
 
     results: List[Dict[str, object]] = []
     for model_name, runner, mapping in MODEL_CONFIGS:
-        summary = runner(df=ticker_df, generate_reports=False, ticker=ticker)
+        metrics_df, _ = runner(data=ticker_df, generate_reports=False, ticker=ticker)
+        summary = aggregate_metrics(metrics_df.to_dict("records"))
         metrics = extract_metrics(summary, mapping)
         if all(value is None for value in metrics.values()):
             LOGGER.info("Skipping %s for %s due to missing metrics.", model_name, ticker)

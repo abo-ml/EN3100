@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -80,13 +80,19 @@ def pairs_spread_signal(asset_a: pd.Series, asset_b: pd.Series) -> float:
     return float(z_score.iloc[-1])
 
 
-def run_iteration() -> Dict[str, float]:
-    df = load_dataset()
+def run_iteration(
+    data: Optional[pd.DataFrame] = None,
+    report_path: Optional[Path] = None,
+    generate_reports: bool = True,
+    ticker: Optional[str] = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    df = load_dataset(data)
     features = feature_columns(df)
 
-    records = []
+    records: List[Dict[str, float]] = []
     equity_curves = []
     strategy_return_frames = []
+    prediction_frames: List[pd.DataFrame] = []
 
     for split_id, (train_idx, test_idx) in enumerate(walk_forward_splits(df, n_splits=3, train_min_period=252), start=1):
         train = df.iloc[train_idx].copy()
@@ -194,6 +200,7 @@ def run_iteration() -> Dict[str, float]:
         test_df["actual_return"] = test.loc[test_df["row_index"], "next_day_return"].values
         test_df["volatility"] = test.loc[test_df["row_index"], "volatility_21"].values
         test_df["date"] = test.loc[test_df["row_index"], "date"].values
+        test_df["ticker"] = test.loc[test_df["row_index"], "ticker"].values
 
         position_size = np.clip(test_df["pred_return"] / (test_df["volatility"].replace(0, np.nan) + 1e-6), -MAX_LEVERAGE, MAX_LEVERAGE)
         strategy_returns = position_size * test_df["actual_return"]
@@ -208,6 +215,11 @@ def run_iteration() -> Dict[str, float]:
             "max_drawdown": max_drawdown(strategy_returns),
         }
         records.append(record)
+        prediction_frames.append(
+            test_df[["date", "ticker", "actual_return", "pred_return"]].rename(
+                columns={"actual_return": "actual", "pred_return": "predicted"}
+            )
+        )
 
         equity_curve = (1 + strategy_returns).cumprod()
         equity_curves.append(pd.DataFrame({"date": test_df["date"], "equity": equity_curve}))
@@ -220,10 +232,12 @@ def run_iteration() -> Dict[str, float]:
             )
         )
 
+    metrics_df = pd.DataFrame(records)
     summary = aggregate_metrics(records)
-    save_metrics_report(summary, REPORT_PATH)
+    if generate_reports:
+        save_metrics_report(summary, report_path or REPORT_PATH)
 
-    if strategy_return_frames:
+    if generate_reports and strategy_return_frames:
         combined_returns = pd.concat(strategy_return_frames).sort_values("date")
         combined_returns["equity_curve"] = (1 + combined_returns["strategy_return"]).cumprod()
         PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
@@ -231,15 +245,17 @@ def run_iteration() -> Dict[str, float]:
         combined_returns.to_csv(output_returns, index=False)
         LOGGER.info("Saved strategy returns to %s", output_returns)
 
-    if equity_curves:
+    if generate_reports and equity_curves:
         combined = pd.concat(equity_curves).sort_values("date")
         plot_equity_curve(combined["date"], combined["equity"], "Iteration 5 Equity Curve", "iteration5_equity_curve.png")
 
-    LOGGER.info("Iteration 5 summary: %s", summary)
-    return summary
+    suffix = f" for {ticker}" if ticker else ""
+    LOGGER.info("Iteration 5 summary%s: %s", suffix, summary)
+    predictions_df = pd.concat(prediction_frames, ignore_index=True) if prediction_frames else pd.DataFrame()
+    return metrics_df, predictions_df
 
 
-def main() -> Dict[str, float]:
+def main() -> Tuple[pd.DataFrame, pd.DataFrame]:
     return run_iteration()
 
 

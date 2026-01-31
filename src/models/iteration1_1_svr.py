@@ -67,18 +67,16 @@ def tune_svr(train_df: pd.DataFrame, features: List[str]) -> Dict[str, float]:
 
 
 def run_iteration(
-    df: Optional[pd.DataFrame] = None,
+    data: Optional[pd.DataFrame] = None,
     report_path: Optional[Path] = None,
     generate_reports: bool = True,
     ticker: Optional[str] = None,
-) -> Dict[str, float]:
-    dataset = load_dataset(df)
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    dataset = load_dataset(data)
     features = feature_columns(dataset)
 
-    records = []
-    all_actual = []
-    all_pred_svr = []
-    all_dates = []
+    records: List[Dict[str, float]] = []
+    prediction_records: List[Dict[str, object]] = []
 
     for split_id, (train_idx, test_idx) in enumerate(
         walk_forward_splits(dataset, n_splits=5, train_min_period=252), start=1
@@ -118,9 +116,15 @@ def run_iteration(
         }
         records.append(record)
 
-        all_actual.extend(y_test.values)
-        all_pred_svr.extend(svr_pred)
-        all_dates.extend(test["date"].values)
+        prediction_records.extend(
+            {
+                "date": date,
+                "ticker": tick,
+                "actual": actual,
+                "predicted": pred,
+            }
+            for date, tick, actual, pred in zip(test["date"].values, test["ticker"].values, y_test.values, svr_pred)
+        )
 
         LOGGER.info(
             "Split %s | Linear RMSE %.4f vs SVR RMSE %.4f",
@@ -129,25 +133,28 @@ def run_iteration(
             record["rmse_svr"],
         )
 
+    metrics_df = pd.DataFrame(records)
     summary = aggregate_metrics(records)
     if generate_reports:
         save_metrics_report(summary, report_path or REPORT_PATH)
 
-        if all_pred_svr:
+        if prediction_records:
+            pred_df = pd.DataFrame(prediction_records)
             plot_pred_vs_actual(
-                dates=pd.Series(all_dates),
-                actual=pd.Series(all_actual),
-                predicted=pd.Series(all_pred_svr),
+                dates=pd.Series(pred_df["date"]),
+                actual=pd.Series(pred_df["actual"]),
+                predicted=pd.Series(pred_df["predicted"]),
                 title="Iteration 1.1: SVR vs Actual",
                 filename=PRED_FIG,
             )
 
     suffix = f" for {ticker}" if ticker else ""
     LOGGER.info("Iteration 1.1 summary%s: %s", suffix, summary)
-    return summary
+    predictions_df = pd.DataFrame(prediction_records)
+    return metrics_df, predictions_df
 
 
-def main() -> Dict[str, float]:
+def main() -> Tuple[pd.DataFrame, pd.DataFrame]:
     return run_iteration()
 
 

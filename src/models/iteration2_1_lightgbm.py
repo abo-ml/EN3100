@@ -111,19 +111,17 @@ def comparison_table(lightgbm_summary: Dict[str, float], baseline_metrics: Dict[
 
 
 def run_iteration(
-    df: Optional[pd.DataFrame] = None,
+    data: Optional[pd.DataFrame] = None,
     report_path: Optional[Path] = None,
     generate_reports: bool = True,
     ticker: Optional[str] = None,
-) -> Dict[str, float]:
-    dataset = load_dataset(df)
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    dataset = load_dataset(data)
     features = feature_columns(dataset)
 
-    records = []
+    records: List[Dict[str, float]] = []
     importances: List[np.ndarray] = []
-    all_dates: List[pd.Timestamp] = []
-    all_pred: List[float] = []
-    all_actual: List[float] = []
+    prediction_records: List[Dict[str, object]] = []
 
     for split_id, (train_idx, test_idx) in enumerate(
         walk_forward_splits(dataset, n_splits=5, train_min_period=252), start=1
@@ -155,9 +153,15 @@ def run_iteration(
             }
         )
 
-        all_dates.extend(test["date"].values)
-        all_pred.extend(y_pred)
-        all_actual.extend(y_test.values)
+        prediction_records.extend(
+            {
+                "date": date,
+                "ticker": tick,
+                "actual": actual,
+                "predicted": pred,
+            }
+            for date, tick, actual, pred in zip(test["date"].values, test["ticker"].values, y_test.values, y_pred)
+        )
 
         LOGGER.info(
             "Split %s | LightGBM RMSE %.4f, MAE %.4f, R2 %.4f",
@@ -167,6 +171,7 @@ def run_iteration(
             records[-1]["r2_lgbm"],
         )
 
+    metrics_df = pd.DataFrame(records)
     summary = aggregate_metrics(records)
 
     if generate_reports:
@@ -185,11 +190,12 @@ def run_iteration(
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text("\n".join(lines))
 
-        if all_pred:
+        if prediction_records:
+            pred_df = pd.DataFrame(prediction_records)
             plot_pred_vs_actual(
-                dates=pd.Series(all_dates),
-                actual=pd.Series(all_actual),
-                predicted=pd.Series(all_pred),
+                dates=pd.Series(pred_df["date"]),
+                actual=pd.Series(pred_df["actual"]),
+                predicted=pd.Series(pred_df["predicted"]),
                 title="Iteration 2.1: LightGBM Actual vs Predicted",
                 filename=PRED_FIG,
             )
@@ -207,10 +213,11 @@ def run_iteration(
 
     suffix = f" for {ticker}" if ticker else ""
     LOGGER.info("Iteration 2.1 summary%s: %s", suffix, summary)
-    return summary
+    predictions_df = pd.DataFrame(prediction_records)
+    return metrics_df, predictions_df
 
 
-def main() -> Dict[str, float]:
+def main() -> Tuple[pd.DataFrame, pd.DataFrame]:
     return run_iteration()
 
 
