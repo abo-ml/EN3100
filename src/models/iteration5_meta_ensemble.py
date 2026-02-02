@@ -12,7 +12,7 @@ from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge
 from sklearn.preprocessing import StandardScaler
 
-from src.evaluation.metrics import directional_accuracy, mae, max_drawdown, rmse, sharpe_ratio
+from src.evaluation.metrics import directional_accuracy, mae, max_drawdown, r2, rmse, sharpe_ratio
 from src.evaluation.reporting import plot_equity_curve, save_metrics_report
 from src.evaluation.walkforward import aggregate_metrics, walk_forward_splits
 from src.models.iteration1_baseline import feature_columns, load_dataset
@@ -208,6 +208,7 @@ def run_iteration(
         record = {
             "rmse_meta": rmse(test_df["actual_return"], test_df["pred_return"]),
             "mae_meta": mae(test_df["actual_return"], test_df["pred_return"]),
+            "r2_meta": r2(test_df["actual_return"], test_df["pred_return"]),
             "directional_accuracy_meta": directional_accuracy(test_df["actual_return"], test_df["pred_return"]),
             "classification_accuracy_meta": (class_pred == (test_df["actual_return"] > 0).astype(int)).mean(),
             "hit_rate": np.mean(np.sign(test_df["actual_return"]) == np.sign(test_df["pred_return"])),
