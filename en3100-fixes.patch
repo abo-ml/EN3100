@@ -1,0 +1,228 @@
+diff --git a/src/data/download_data.py b/src/data/download_data.py
+index 1111111..2222222 100644
+--- a/src/data/download_data.py
++++ b/src/data/download_data.py
+@@
+-"""Data acquisition utilities for downloading historical OHLCV data.
+-
+-This module handles interaction with Alpha Vantage (primary) and Yahoo Finance
+-as a fallback, performs basic cleaning, and stores the results under
+-``data/raw`` for subsequent processing. Hooks are included for integrating
+-higher-frequency order book data from broker APIs. The functions are designed
+-for reproducibility in the accompanying dissertation project.
+-This module handles interaction with Yahoo Finance via yfinance, performs
+-basic cleaning, and stores the results under ``data/raw`` for subsequent
+-processing. Hooks are included for integrating higher-frequency order book data
+-from broker APIs. The functions are designed for reproducibility in the
+-accompanying dissertation project.
+-"""
++"""Data acquisition utilities for downloading historical OHLCV data.
++
++This module handles interaction with Alpha Vantage (primary) and Yahoo Finance
++as a fallback, performs basic cleaning, and stores the results under
++``data/raw`` for subsequent processing. Hooks are included for integrating
++higher-frequency order book data from broker APIs. The functions are designed
++for reproducibility in the accompanying dissertation project.
++"""
+@@
+-def download_single_ticker(ticker: str, config: DownloadConfig) -> pd.DataFrame:
+-    """Download OHLCV data for a single ticker with retry logic and fallback."""
+-    # ... full implementation using provider list ...
+-    return data
+-
+-def download_single_ticker(ticker: str, config: DownloadConfig) -> pd.DataFrame:
+-    """Download OHLCV data for a single ticker with retry logic."""
+-    # ... simplified yfinance-only implementation ...
+-    return data
++def download_single_ticker(ticker: str, config: DownloadConfig) -> pd.DataFrame:
++    """
++    Download OHLCV data for a single ticker with retry logic and provider fallback.
++
++    Tries providers in order specified by `config.providers` (e.g.,
++    ["alpha_vantage", "yfinance"]). On provider failure, logs the exception and
++    retries with the next provider.
++    """
++    last_err = None
++    providers = getattr(config, "providers", ["alpha_vantage", "yfinance"])
++    for provider in providers:
++        try:
++            if provider == "alpha_vantage":
++                df = _download_alpha_vantage(ticker, config)
++            elif provider == "yfinance":
++                df = _download_yfinance(ticker, config)
++            else:
++                raise ValueError(f"Unknown provider: {provider}")
++            if df is None or df.empty:
++                raise RuntimeError(f"No data returned by provider: {provider}")
++            return _basic_clean_ohlcv(df)
++        except Exception as e:
++            last_err = e
++            try:
++                _log_warning(f"Provider {provider} failed for {ticker}: {e}")
++            except Exception:
++                pass
++            continue
++    raise RuntimeError(f"All providers failed for {ticker}") from last_err
+@@
+-parser = argparse.ArgumentParser(description="Download OHLCV data from public APIs")
+-parser = argparse.ArgumentParser(description="Download OHLCV data via yfinance")
++parser = argparse.ArgumentParser(description="Download OHLCV data from public APIs")
+@@
+-        output_stem = _normalise_ticker_for_filename(ticker)
+-        output_path = RAW_DATA_DIR / f"{output_stem}.{config.format}"
+-        output_path = RAW_DATA_DIR / f"{ticker.replace('^', '')}.{config.format}"
++        output_stem = _normalise_ticker_for_filename(ticker)
++        output_path = RAW_DATA_DIR / f"{output_stem}.{config.format}"
+         ensure_directory(output_path)
+
+diff --git a/src/advanced/orderflow_scalping.py b/src/advanced/orderflow_scalping.py
+index 3333333..4444444 100644
+--- a/src/advanced/orderflow_scalping.py
++++ b/src/advanced/orderflow_scalping.py
+@@
+ class OrderFlowAlphaModel:
+     def __init__(self):
+         pass
+ 
+     def fit(self, df: pd.DataFrame) -> None:
+         """
+         Fit the model using order book data.
+ 
+         :param df: DataFrame with order flow signals.
+         """
+-        # TODO: Implement fitting logic
+-        pass
++        raise NotImplementedError(
++            "OrderFlowAlphaModel.fit is a placeholder. Integrate real L2/OFI pipeline."
++        )
+ 
+     def predict_signal(self, df: pd.DataFrame) -> pd.Series:
+         """
+         Predict long/short signal strength based on order flow features.
+ 
+         :param df: DataFrame with engineered features.
+         :return: Series with signals in range [-1, 1].
+         """
+-        # TODO: Implement alpha scoring logic
+-        return pd.Series(0.0, index=df.index)
++        raise NotImplementedError(
++            "OrderFlowAlphaModel.predict_signal is a placeholder. Implement alpha scoring."
++        )
+
+diff --git a/src/advanced/pattern_recognition.py b/src/advanced/pattern_recognition.py
+index 5555555..6666666 100644
+--- a/src/advanced/pattern_recognition.py
++++ b/src/advanced/pattern_recognition.py
+@@
+-def detect_head_and_shoulders(df: pd.DataFrame) -> pd.Series:
+-    # TODO
+-    return pd.Series(0, index=df.index)
++def detect_head_and_shoulders(df: pd.DataFrame) -> pd.Series:
++    raise NotImplementedError("Pattern recognition is a placeholder.")
+@@
+-def detect_double_top(df: pd.DataFrame) -> pd.Series:
+-    # TODO
+-    return pd.Series(0, index=df.index)
++def detect_double_top(df: pd.DataFrame) -> pd.Series:
++    raise NotImplementedError("Pattern recognition is a placeholder.")
+
+diff --git a/src/advanced/reinforcement_learning.py b/src/advanced/reinforcement_learning.py
+index 7777777..8888888 100644
+--- a/src/advanced/reinforcement_learning.py
++++ b/src/advanced/reinforcement_learning.py
+@@
+-class TradingEnv(gym.Env):
+-    # TODO: skeleton
+-    pass
++class TradingEnv(gym.Env):
++    def __init__(self, *args, **kwargs):
++        raise NotImplementedError("RL environment is a placeholder.")
+
+diff --git a/tests/test_download_data.py b/tests/test_download_data.py
+new file mode 100644
+index 0000000..9999999
+--- /dev/null
++++ b/tests/test_download_data.py
+@@
++import pandas as pd
++import pytest
++
++import src.data.download_data as dd
++
++
++class DummyConfig:
++    providers = ["alpha_vantage", "yfinance"]
++    format = "parquet"
++
++
++def _df():
++    return pd.DataFrame(
++        {
++            "Open": [1, 2],
++            "High": [1, 2],
++            "Low": [1, 2],
++            "Close": [1.0, 1.02],
++            "Volume": [100, 120],
++        },
++        index=pd.to_datetime(["2024-01-02", "2024-01-03"]),
++    )
++
++
++def test_download_single_ticker_falls_back(monkeypatch):
++    # Alpha Vantage fails; yfinance succeeds
++    monkeypatch.setattr(
++        dd,
++        "_download_alpha_vantage",
++        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("AV down")),
++    )
++    monkeypatch.setattr(dd, "_download_yfinance", lambda *a, **k: _df())
++    monkeypatch.setattr(dd, "_basic_clean_ohlcv", lambda df: df)
++
++    df = dd.download_single_ticker("AAPL", DummyConfig())
++    assert isinstance(df, pd.DataFrame)
++    assert not df.empty
++
++
++def test_cli_parser_description_unique():
++    assert "public APIs" in dd.parser.description
++
+
+diff --git a/tests/test_placeholders.py b/tests/test_placeholders.py
+new file mode 100644
+index 0000000..aaaaaaa
+--- /dev/null
++++ b/tests/test_placeholders.py
+@@
++import pandas as pd
++import pytest
++
++
++def test_orderflow_placeholders_raise():
++    from src.advanced.orderflow_scalping import OrderFlowAlphaModel
++
++    m = OrderFlowAlphaModel()
++    with pytest.raises(NotImplementedError):
++        m.fit(pd.DataFrame({"x": [1, 2]}))
++    with pytest.raises(NotImplementedError):
++        m.predict_signal(pd.DataFrame({"x": [1, 2]}))
++
++
++def test_pattern_placeholders_raise():
++    from src.advanced.pattern_recognition import (
++        detect_head_and_shoulders,
++        detect_double_top,
++    )
++
++    with pytest.raises(NotImplementedError):
++        detect_head_and_shoulders(pd.DataFrame({"Close": [1, 2, 3]}))
++    with pytest.raises(NotImplementedError):
++        detect_double_top(pd.DataFrame({"Close": [1, 2, 3]}))
++
++
++def test_rl_env_placeholder_guard():
++    gym = pytest.importorskip("gym")
++    from src.advanced.reinforcement_learning import TradingEnv
++
++    with pytest.raises(NotImplementedError):
++        TradingEnv()
++
