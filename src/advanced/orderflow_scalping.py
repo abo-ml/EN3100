@@ -19,16 +19,14 @@ class OrderFlowAlphaModel:
 
     def fit(self, orderbook_features: Any) -> None:  # noqa: D401
         """TODO: Fit the alpha model using historical order book data."""
-        return None
+        raise NotImplementedError(
+            "OrderFlowAlphaModel.fit() is not implemented. "
+            "Requires Level 2 order book data from a broker API."
+        )
 
     def predict_signal(self, latest_ofi: float, spread: float, depth_ratio: float) -> int:
         """Return a placeholder scalp signal based on OFI inputs."""
-
-        # TODO: Implement real decision rules / ML model once intraday data is available.
-        if np.isnan(latest_ofi) or np.isnan(spread) or np.isnan(depth_ratio):
-            return 0
-        if latest_ofi > 0.1 and depth_ratio > 0.6:
-            return 1
-        if latest_ofi < -0.1 and depth_ratio < 0.4:
-            return -1
-        return 0
+        raise NotImplementedError(
+            "OrderFlowAlphaModel.predict_signal() is not implemented. "
+            "Requires real-time order flow imbalance features."
+        )

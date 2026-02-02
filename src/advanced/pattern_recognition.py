@@ -55,3 +55,25 @@ def swing_high_low_flags(prices: pd.DataFrame, window: int = 3) -> pd.DataFrame:
         },
         index=prices.index,
     )
+
+
+def detect_head_and_shoulders(prices: pd.DataFrame) -> pd.Series:
+    """Placeholder for head-and-shoulders pattern detection.
+
+    Raises NotImplementedError until rule-based or ML-driven detection is implemented.
+    """
+    raise NotImplementedError(
+        "detect_head_and_shoulders() is not implemented. "
+        "Requires annotated pattern data or rule-based detection logic."
+    )
+
+
+def detect_double_top(prices: pd.DataFrame) -> pd.Series:
+    """Placeholder for double-top pattern detection.
+
+    Raises NotImplementedError until rule-based or ML-driven detection is implemented.
+    """
+    raise NotImplementedError(
+        "detect_double_top() is not implemented. "
+        "Requires annotated pattern data or rule-based detection logic."
+    )
