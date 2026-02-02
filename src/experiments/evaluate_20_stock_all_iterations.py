@@ -323,6 +323,22 @@ def compute_iteration_summary(df: pd.DataFrame, metrics: List[str]) -> pd.DataFr
     return pd.DataFrame(records)
 
 
+def compute_iteration_summary_stats(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame()
+    summary = df.groupby("iteration").agg(
+        mean_da=("directional_accuracy", "mean"),
+        std_da=("directional_accuracy", "std"),
+        mean_rmse=("rmse", "mean"),
+        std_rmse=("rmse", "std"),
+        mean_mae=("mae", "mean"),
+        std_mae=("mae", "std"),
+        mean_r2=("r2", "mean"),
+        std_r2=("r2", "std"),
+    )
+    return summary.reset_index()
+
+
 def plot_iteration_mean_ci(summary_df: pd.DataFrame, output_path: Path) -> None:
     if summary_df.empty:
         LOGGER.warning("Skipping iteration mean/CI plot due to empty summary.")
@@ -378,6 +394,9 @@ def build_run_metadata(
         .agg(["min", "max"])
         .reset_index()
     )
+    overall_dates = feature_df[feature_df["ticker"].isin(tickers)]["date"]
+    overall_start = overall_dates.min().date().isoformat() if not overall_dates.empty else None
+    overall_end = overall_dates.max().date().isoformat() if not overall_dates.empty else None
     ticker_dates = {
         row["ticker"]: {"start_date": row["min"].date().isoformat(), "end_date": row["max"].date().isoformat()}
         for _, row in date_ranges.iterrows()
@@ -405,8 +424,10 @@ def build_run_metadata(
     return {
         "features_path": str(features_path),
         "tickers": tickers,
+        "date_range": {"start": overall_start, "end": overall_end},
         "ticker_date_ranges": ticker_dates,
         "library_versions": library_versions,
+        "global_seed": 42,
         "random_seeds": random_seeds,
     }
 
@@ -469,17 +490,21 @@ def main(cmd_args: Optional[List[str]] = None) -> None:
 
     export_pivot_tables(metrics_df, ns.output_dir)
 
-    summary_metrics = ["directional_accuracy", "rmse", "mae", "r2"]
-    summary_df = compute_iteration_summary(metrics_df, summary_metrics)
+    summary_df = compute_iteration_summary_stats(metrics_df)
     summary_path = ns.output_dir / "iteration_summary.csv"
     summary_df.to_csv(summary_path, index=False)
+
+    summary_metrics = ["directional_accuracy", "rmse", "mae", "r2"]
+    summary_long_df = compute_iteration_summary(metrics_df, summary_metrics)
+    summary_long_path = ns.output_dir / "iteration_summary_long.csv"
+    summary_long_df.to_csv(summary_long_path, index=False)
 
     heatmap_path = ns.output_dir / "accuracy_heatmap.png"
     boxplot_path = ns.output_dir / "accuracy_boxplot.png"
     plot_accuracy_heatmap(metrics_df, heatmap_path)
     plot_accuracy_boxplot(metrics_df, boxplot_path)
     plot_iteration_bars(metrics_df, ns.output_dir)
-    plot_iteration_mean_ci(summary_df, ns.output_dir / "iteration_mean_ci.png")
+    plot_iteration_mean_ci(summary_long_df, ns.output_dir / "iteration_mean_ci.png")
     plot_walk_forward_schematic(FIGURES_DIR / "walk_forward_splits.png")
 
     save_improvement_tables(metrics_df, ns.output_dir / "directional_accuracy_delta_tables.md")
