@@ -188,8 +188,11 @@ def compute_ofi(df: pd.DataFrame) -> pd.Series:
         # OFI = (Δbid - Δask) * price_direction
         ofi_raw = (delta_bid - delta_ask) * price_direction
 
-        # Normalize by total volume change to make it comparable across assets
-        total_vol_change = (delta_bid.abs() + delta_ask.abs()).replace(0, np.nan)
+        # Normalize by total volume change to make it comparable across assets.
+        # Use small epsilon to avoid division by zero; this ensures stable results
+        # when volume changes are zero (no activity).
+        total_vol_change = delta_bid.abs() + delta_ask.abs()
+        total_vol_change = total_vol_change.replace(0, 1e-10)  # Replace zeros with small epsilon
         ofi_normalized = ofi_raw / total_vol_change
         result = ofi_normalized.fillna(0)
 

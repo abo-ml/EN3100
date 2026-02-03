@@ -124,8 +124,9 @@ def detect_head_and_shoulders(
             and head > right_shoulder * (1 + tolerance)
         ):
             # Shoulders should be at similar heights (within tolerance of each other)
+            # Guard against division by zero with max of shoulders and small epsilon
             shoulder_diff = abs(left_shoulder - right_shoulder) / max(
-                left_shoulder, right_shoulder
+                left_shoulder, right_shoulder, 1e-10
             )
             if shoulder_diff < tolerance * 2:
                 # Mark the right shoulder as the pattern completion point

@@ -22,6 +22,9 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+# Default lookback period in days (2 years)
+DEFAULT_LOOKBACK_DAYS = 730
+
 # Default macro tickers for yfinance
 DEFAULT_MACRO_TICKERS = {
     "vix": "^VIX",           # VIX Volatility Index
@@ -63,7 +66,7 @@ def load_macro_factors_yfinance(
     if end_date is None:
         end_date = datetime.now().strftime("%Y-%m-%d")
     if start_date is None:
-        start_date = (datetime.now() - timedelta(days=730)).strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(days=DEFAULT_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
 
     macro_data = {}
 
@@ -140,7 +143,7 @@ def load_macro_factors_datareader(
     if end_date is None:
         end_date = datetime.now().strftime("%Y-%m-%d")
     if start_date is None:
-        start_date = (datetime.now() - timedelta(days=730)).strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(days=DEFAULT_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
 
     api_key = os.environ.get("FRED_API_KEY")
 

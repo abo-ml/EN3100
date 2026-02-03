@@ -223,7 +223,12 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
             pattern_flags = detect_chart_patterns_stub()
         for name, value in pattern_flags.items():
             if isinstance(value, pd.Series):
-                group[name] = value.values if len(value) == len(group) else 0
+                # Ensure Series is aligned to group index
+                if len(value) == len(group):
+                    group[name] = value.values
+                else:
+                    # Create zeros with correct length if Series length mismatch
+                    group[name] = np.zeros(len(group), dtype=int)
             else:
                 group[name] = value
 
