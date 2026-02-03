@@ -23,17 +23,12 @@ class TradingEnv(gym.Env):
 
     metadata = {"render.modes": ["human"]}
 
-    def __init__(self, prices: np.ndarray, features: np.ndarray, config: TradingEnvConfig | None = None) -> None:
-        super().__init__()
-        self.config = config or TradingEnvConfig()
-        self.prices = prices
-        self.features = features
-        self.current_step = self.config.window_size
-        self.position = 0.0
-        self.cash = 0.0
-        self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(1,))
-        feature_dim = features.shape[1]
-        self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.config.window_size, feature_dim + 2))
+    def __init__(self, prices: np.ndarray = None, features: np.ndarray = None, config: TradingEnvConfig | None = None) -> None:
+        raise NotImplementedError(
+            "TradingEnv is not implemented. "
+            "Requires integration with stable-baselines3 or custom RL algorithms "
+            "and real market data for training."
+        )
 
     def _get_observation(self) -> np.ndarray:
         window_prices = self.prices[self.current_step - self.config.window_size : self.current_step]
