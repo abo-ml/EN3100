@@ -16,32 +16,54 @@ The mixed-asset workflow remains the default path for the dissertation. The new 
 
 ## Repository Structure
 ```
+├── .github/
+│   └── workflows/          # CI/CD workflows (tests.yml)
+├── app/
+│   └── streamlit_app.py    # Optional visualisation UI
+├── configs/
+│   └── universe.yaml       # Config-driven pipeline settings
 ├── data/
 │   ├── raw/                # Downloaded OHLCV data
 │   └── processed/          # Aligned and feature-engineered datasets
+├── docs/
+│   ├── COLAB_RUNBOOK.md    # Google Colab quick-start pipelines
+│   ├── EQUATIONS.md        # Mathematical reference for all formulas
+│   ├── EXPERIMENTS.md      # Experiment matrix and validation notes
+│   └── local_setup.md      # Local and Colab setup guide
 ├── notebooks/
 │   ├── Iteration_1.ipynb.py
-│   ├── Iteration_1_1.ipynb.py
 │   ├── Iteration_2.ipynb.py
-│   ├── Iteration_2_1.ipynb.py
 │   ├── Iteration_3.ipynb.py
 │   ├── Iteration_4.ipynb.py
-│   └── Iteration_5.ipynb.py
+│   ├── Iteration_5.ipynb.py
+│   └── final_comparison.ipynb.py
+├── project_assets/         # Project management files (Gantt, Risk Register)
 ├── reports/
 │   ├── figures/            # Generated plots
 │   ├── iteration_1_results.md
-│   ├── iteration_1_1_svr_results.md
 │   ├── iteration_2_results.md
-│   ├── iteration_2_1_lightgbm_results.md
 │   ├── iteration_3_results.md
 │   ├── iteration_4_results.md
 │   └── iteration_5_results.md
+├── scripts/
+│   ├── plot_walk_forward.py
+│   └── smoke_check.sh      # Basic syntax/import checks
 ├── src/
 │   ├── advanced/           # Future-work stubs (order flow, pattern recognition, RL)
 │   ├── data/               # Data acquisition & alignment
 │   ├── evaluation/         # Metrics, walk-forward, reporting utilities
+│   ├── experiments/        # Per-asset & equity universe evaluation scripts
 │   ├── features/           # Feature engineering and target construction
-│   └── models/             # Iteration-specific training scripts
+│   ├── models/             # Iteration-specific training scripts
+│   ├── risk/               # Monte Carlo risk analysis
+│   ├── universe/           # S&P 500 universe utilities
+│   └── utils/              # Shared path utilities
+├── tests/                  # Unit tests for data downloads and placeholders
+├── tools/
+│   └── md_to_doc_pdf.py    # Report conversion utility
+├── market_forecasting.py   # Standalone demonstration module
+├── CHANGELOG.md            # Release notes
+├── MERGE_GUIDE.md          # Conflict resolution guidance
 ├── requirements.txt
 └── README.md
 ```
@@ -161,6 +183,12 @@ python -m src.experiments.per_asset_equity_evaluation
 ```
 Ticker lists are stored under `data/reference/`, with aligned data in `data/processed/` and plots in `reports/figures/`. The mixed-asset workflow stays unchanged if you skip these optional steps.
 
+For a comprehensive evaluation across all iterations on the 20-stock universe:
+```bash
+python -m src.experiments.evaluate_20_stock_all_iterations
+```
+This produces summary statistics, pivot tables, and iteration comparisons for the equity universe.
+
 ## Config-driven runner (application layer)
 Use the lightweight runner to drive the same pipelines from a config file:
 ```bash
@@ -174,6 +202,21 @@ Launch a simple UI to trigger the runner and view existing reports/figures:
 streamlit run app/streamlit_app.py
 ```
 The UI is for demonstration/visualisation only; dissertation results should continue to use the deterministic CLI flows above.
+
+## Running Tests
+Run the test suite with pytest to verify data downloads and placeholder guards:
+```bash
+pip install pytest
+pytest tests/ -v
+```
+Tests include:
+- `test_download_data.py`: validates provider fallback and CLI parser
+- `test_placeholders.py`: ensures unimplemented advanced modules raise `NotImplementedError`
+
+A smoke-check script is also available for quick syntax verification:
+```bash
+bash scripts/smoke_check.sh
+```
 
 ## Iteration Roadmap
 1. **Iteration 1 – Linear Baselines:** Persistence, linear regression, and logistic regression models validate the pipeline and establish benchmark metrics.
@@ -208,10 +251,19 @@ Robustness is evaluated via chronological walk-forward validation across all ass
 - See `MERGE_GUIDE.md` for a concise checklist.
 
 ## Reports & Interpretation
-Each iteration stores Markdown summaries in `reports/iteration_X_results.md` (including the extended `iteration_1_1_svr_results.md`, `iteration_2_1_lightgbm_results.md`, and `iteration_5_monte_carlo.md`) and plots in `reports/figures/`. Review these artefacts alongside the notebooks to interpret model strengths, weaknesses, and improvement paths. Iteration 5 additionally logs cumulative PnL, Sharpe ratio, max drawdown, and hit rate for the dynamic strategy, while `src/risk/monte_carlo.py` produces equity/drawdown histograms and fan charts for stress-testing that strategy.
+Each iteration stores Markdown summaries in `reports/iteration_X_results.md` and plots in `reports/figures/`. Review these artefacts alongside the notebooks to interpret model strengths, weaknesses, and improvement paths. Iteration 5 additionally logs cumulative PnL, Sharpe ratio, max drawdown, and hit rate for the dynamic strategy, while `src/risk/monte_carlo.py` produces equity/drawdown histograms and fan charts for stress-testing that strategy.
 
 ## Mathematical Reference (All Equations)
 Every transformation, feature, target, and metric used across the pipeline is written explicitly in `docs/EQUATIONS.md`. Consult that file when documenting methodology or validating that the implementation matches the theoretical definitions (e.g., RSI, MACD, OFI, walk-forward scaling, RMSE/MAE/R², Sharpe/max drawdown, position sizing, Monte Carlo bootstrap).
+
+## Additional Documentation
+The `docs/` folder contains supplementary guides and references:
+- **`COLAB_RUNBOOK.md`**: Ready-to-run pipelines for Google Colab (4-asset and 20-stock flows)
+- **`EQUATIONS.md`**: Complete mathematical reference for all features, metrics, and transformations
+- **`EXPERIMENTS.md`**: Experiment matrix detailing the three evaluation modes (mixed panel, per-asset, equity universe)
+- **`local_setup.md`**: Step-by-step setup guide for Windows, macOS/Linux, and Colab environments
+
+See also `CHANGELOG.md` for release notes and `MERGE_GUIDE.md` for conflict resolution guidance.
 
 ## Asset Scope Guidance
 - **Single-asset runs (e.g., AAPL only):** useful for isolating model behaviour on one market, speeding up experimentation, and diagnosing feature relevance without cross-asset noise. Risk: overfitting to idiosyncratic patterns.
