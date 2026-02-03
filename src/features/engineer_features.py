@@ -70,12 +70,58 @@ def swing_points(high: pd.Series, low: pd.Series, window: int = 3) -> Tuple[pd.S
 
 
 def detect_chart_patterns_stub() -> dict:
-    """Return zeros as placeholders for chart pattern detection."""
+    """Return zeros as placeholders for chart pattern detection.
+
+    .. deprecated::
+        This stub is maintained for backward compatibility. Use
+        :func:`detect_chart_patterns` instead for actual pattern detection.
+    """
 
     return {
         "pattern_head_shoulders": 0,
         "pattern_double_top": 0,
         "pattern_double_bottom": 0,
+    }
+
+
+def detect_chart_patterns(
+    prices: pd.DataFrame, window: int = 5, tolerance: float = 0.02
+) -> dict:
+    """Detect chart patterns and return binary flags for each pattern type.
+
+    Uses rule-based algorithms to detect head-and-shoulders and double-top/
+    double-bottom patterns in price data.
+
+    Parameters
+    ----------
+    prices : pd.DataFrame
+        DataFrame with at least a 'close' column and index aligned to dates.
+    window : int
+        Number of bars on each side to identify local maxima/minima. Default is 5.
+    tolerance : float
+        Height threshold for pattern detection. Default is 0.02 (2%).
+
+    Returns
+    -------
+    dict
+        Dictionary mapping pattern names to pd.Series aligned to the input index:
+        - pattern_head_shoulders: 1 if detected, 0 otherwise
+        - pattern_double_top: 1 if double-top detected, 0 otherwise
+        - pattern_double_bottom: 1 if double-bottom detected, 0 otherwise
+    """
+    from ..advanced.pattern_recognition import detect_head_and_shoulders, detect_double_top
+
+    head_shoulders = detect_head_and_shoulders(prices, window=window, tolerance=tolerance)
+    double_pattern = detect_double_top(prices, window=window, tolerance=tolerance)
+
+    # Convert double_top series: 1 = double-top, -1 = double-bottom
+    double_top = (double_pattern == 1).astype(int)
+    double_bottom = (double_pattern == -1).astype(int)
+
+    return {
+        "pattern_head_shoulders": head_shoulders,
+        "pattern_double_top": double_top,
+        "pattern_double_bottom": double_bottom,
     }
 
 
@@ -167,9 +213,24 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
         swing_flags = swing_high_low_flags(group)
         for name, series in swing_flags.items():
             group[name] = series
-        pattern_flags = detect_chart_patterns_stub()
+
+        # Use the real pattern detection when enough data is available
+        # (minimum 2 * window bars required for pattern detection)
+        if len(group) > 20:
+            pattern_flags = detect_chart_patterns(group, window=5, tolerance=0.02)
+        else:
+            # Fall back to stub for very small groups
+            pattern_flags = detect_chart_patterns_stub()
         for name, value in pattern_flags.items():
-            group[name] = value
+            if isinstance(value, pd.Series):
+                # Ensure Series is aligned to group index
+                if len(value) == len(group):
+                    group[name] = value.values
+                else:
+                    # Create zeros with correct length if Series length mismatch
+                    group[name] = np.zeros(len(group), dtype=int)
+            else:
+                group[name] = value
 
         group["ict_smt_asia"] = ict_smt_asia_window_feature()
         group["sentiment_score"] = group.get("sentiment_score", 0.0)
