@@ -15,3 +15,8 @@ streamlit>=1.31
 # Optional sentiment analysis dependencies
 textblob>=0.17  # For sentiment analysis (optional, VADER in NLTK is preferred)
 # Note: NLTK's VADER lexicon will be downloaded automatically if needed
+# Reinforcement learning dependencies
+gymnasium>=0.29.0  # OpenAI Gym successor for RL environments
+stable-baselines3>=2.0.0  # PPO, A2C and other RL algorithms
+# HTTP client for API calls
+requests>=2.28.0  # For broker API integration (Alpaca, Binance)

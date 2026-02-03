@@ -16,6 +16,7 @@ References:
 
 from __future__ import annotations
 
+import argparse
 import logging
 import math
 import os
@@ -1131,6 +1132,130 @@ def reinforcement_learning_placeholder() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Reinforcement Learning CLI
+# ---------------------------------------------------------------------------
+
+def train_rl_trading_agent(
+    tickers: Sequence[str] = ("AAPL",),
+    start: str = "2015-01-01",
+    end: str = "2023-12-31",
+    algorithm: str = "PPO",
+    total_timesteps: int = 10000,
+    window_size: int = 60,
+    transaction_cost: float = 0.0001,
+    output_path: Optional[str] = None,
+) -> None:
+    """Train an RL trading agent on historical data.
+
+    This function downloads data, builds features, creates a trading environment,
+    and trains a reinforcement learning agent using PPO or A2C algorithms.
+
+    Parameters
+    ----------
+    tickers : Sequence[str], default=("AAPL",)
+        Ticker symbols to train on.
+    start : str, default="2015-01-01"
+        Start date for training data.
+    end : str, default="2023-12-31"
+        End date for training data.
+    algorithm : str, default="PPO"
+        RL algorithm to use: "PPO" or "A2C".
+    total_timesteps : int, default=10000
+        Total timesteps for training.
+    window_size : int, default=60
+        Observation window size for the environment.
+    transaction_cost : float, default=0.0001
+        Transaction cost per trade (as fraction).
+    output_path : str, optional
+        Path to save the trained model. If None, model is not saved.
+
+    Example
+    -------
+    >>> train_rl_trading_agent(
+    ...     tickers=["AAPL"],
+    ...     start="2018-01-01",
+    ...     end="2023-12-31",
+    ...     algorithm="PPO",
+    ...     total_timesteps=50000,
+    ... )
+    """
+    try:
+        from src.advanced.reinforcement_learning import (
+            TradingEnv,
+            TradingEnvConfig,
+            train_rl_agent,
+            evaluate_agent,
+        )
+    except ImportError as e:
+        logger.error(
+            "Failed to import RL modules. Ensure stable-baselines3 and gymnasium "
+            f"are installed: {e}"
+        )
+        return
+
+    logger.info(f"Downloading data for {tickers} from {start} to {end}...")
+    raw_data = fetch_data(list(tickers), start=start, end=end)
+
+    logger.info("Building features...")
+    features_df, target_cols, scaler = build_features(raw_data)
+
+    # Prepare data for RL environment
+    # Use close prices as the price series
+    close_cols = [col for col in features_df.columns if "close" in col.lower()]
+    if not close_cols:
+        logger.error("No close price column found in features")
+        return
+
+    prices = features_df[close_cols[0]].dropna().values
+
+    # Use other features as observation features
+    feature_cols = [
+        col for col in features_df.columns
+        if col not in target_cols and "close" not in col.lower()
+    ]
+    obs_features = features_df[feature_cols].fillna(0).values
+
+    # Align lengths
+    min_len = min(len(prices), len(obs_features))
+    prices = prices[-min_len:]
+    obs_features = obs_features[-min_len:]
+
+    logger.info(f"Data prepared: {len(prices)} samples, {obs_features.shape[1]} features")
+
+    # Create environment
+    config = TradingEnvConfig(
+        window_size=window_size,
+        transaction_cost=transaction_cost,
+    )
+    env = TradingEnv(prices=prices, features=obs_features, config=config)
+
+    logger.info(f"Training {algorithm} agent for {total_timesteps} timesteps...")
+    model = train_rl_agent(
+        env,
+        algorithm=algorithm,
+        total_timesteps=total_timesteps,
+        verbose=1,
+    )
+
+    # Evaluate the trained model
+    logger.info("Evaluating trained agent...")
+    metrics = evaluate_agent(model, env, n_episodes=5)
+
+    logger.info("=" * 50)
+    logger.info("Training Results:")
+    logger.info(f"  Mean Return: {metrics['mean_return']:.4f}")
+    logger.info(f"  Std Return:  {metrics['std_return']:.4f}")
+    logger.info(f"  Sharpe Ratio: {metrics['mean_sharpe']:.4f}")
+    logger.info(f"  Max Drawdown: {metrics['max_drawdown']:.4f}")
+    logger.info("=" * 50)
+
+    # Save model if path provided
+    if output_path:
+        model.save(output_path)
+        logger.info(f"Model saved to {output_path}")
+
+
+# ---------------------------------------------------------------------------
 # Example usage
 # ---------------------------------------------------------------------------
 
@@ -1154,5 +1279,86 @@ def main() -> None:
     run_ensemble_iteration(feature_cols, target_cols, splits, seq_len=60, epochs=5, batch_size=32)
 
 
+def cli_main() -> None:
+    """CLI entry point with subcommands for different operations."""
+    parser = argparse.ArgumentParser(
+        description="Market Forecasting Module - ML models and RL trading agents",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Run traditional ML iterations
+  python market_forecasting.py run
+
+  # Train RL trading agent
+  python market_forecasting.py train-rl --tickers AAPL TSLA --timesteps 50000
+
+  # Train RL agent with A2C algorithm
+  python market_forecasting.py train-rl --algorithm A2C --timesteps 100000
+        """,
+    )
+
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # Run command (default behavior)
+    run_parser = subparsers.add_parser("run", help="Run traditional ML iterations")
+    run_parser.add_argument(
+        "--tickers", nargs="+", default=["AAPL", "TSLA"],
+        help="Ticker symbols to analyze"
+    )
+
+    # Train RL command
+    rl_parser = subparsers.add_parser("train-rl", help="Train RL trading agent")
+    rl_parser.add_argument(
+        "--tickers", nargs="+", default=["AAPL"],
+        help="Ticker symbols to train on (default: AAPL)"
+    )
+    rl_parser.add_argument(
+        "--start", default="2015-01-01",
+        help="Start date (default: 2015-01-01)"
+    )
+    rl_parser.add_argument(
+        "--end", default="2023-12-31",
+        help="End date (default: 2023-12-31)"
+    )
+    rl_parser.add_argument(
+        "--algorithm", choices=["PPO", "A2C"], default="PPO",
+        help="RL algorithm to use (default: PPO)"
+    )
+    rl_parser.add_argument(
+        "--timesteps", type=int, default=10000,
+        help="Total timesteps for training (default: 10000)"
+    )
+    rl_parser.add_argument(
+        "--window-size", type=int, default=60,
+        help="Observation window size (default: 60)"
+    )
+    rl_parser.add_argument(
+        "--transaction-cost", type=float, default=0.0001,
+        help="Transaction cost per trade (default: 0.0001)"
+    )
+    rl_parser.add_argument(
+        "--output", type=str, default=None,
+        help="Path to save trained model"
+    )
+
+    args = parser.parse_args()
+
+    if args.command == "train-rl":
+        train_rl_trading_agent(
+            tickers=args.tickers,
+            start=args.start,
+            end=args.end,
+            algorithm=args.algorithm,
+            total_timesteps=args.timesteps,
+            window_size=args.window_size,
+            transaction_cost=args.transaction_cost,
+            output_path=args.output,
+        )
+    elif args.command == "run" or args.command is None:
+        main()
+    else:
+        parser.print_help()
+
+
 if __name__ == "__main__":
-    main()
+    cli_main()

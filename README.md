@@ -284,18 +284,115 @@ Robustness is evaluated via chronological walk-forward validation across all ass
 - **Execution / Trading APIs:** Connect the VWAP/TWAP planners to broker SDKs once paper trading permissions are granted.
 - **Security:** Keep secrets in environment variables or a local `.env` file (already ignored in version control). Never commit credentials, and rotate any key that may have been exposed.
 
+### Broker API Configuration
+The order book integration supports two providers:
+
+**Alpaca (for US equities):**
+```bash
+export APCA_API_KEY_ID="your-api-key"
+export APCA_API_SECRET_KEY="your-secret-key"
+export APCA_API_BASE_URL="https://paper-api.alpaca.markets"  # Optional, defaults to paper trading
+```
+
+**Binance (for crypto):**
+```bash
+export BINANCE_API_KEY="your-api-key"       # Optional for public endpoints
+export BINANCE_API_SECRET="your-secret"      # Optional for public endpoints
+```
+
 ### TODO checklist (API and private data wiring)
-- `src/data/download_data.py::fetch_orderbook_snapshot`: replace the commented Alpaca placeholders (`APCA-API-KEY-ID`, `APCA-API-SECRET-KEY`) and return live Level 2 depth.
 - `src/data/download_data.py` CLI: supply your Alpha Vantage key via `--api-key` or the `ALPHAVANTAGE_API_KEY/ALPHA_VANTAGE_API_KEY` environment variable when using the Alpha Vantage provider.
 - `src/data/align_data.py`: pass `--sentiment-csv` or populate `fetch_sentiment_scores` with your API-backed sentiment feed.
 - `src/advanced/sentiment.py`: implement the real sentiment loaders or API calls; keep credentials outside version control.
-- `src/advanced/orderflow_scalping.py`: populate order book ingestion and OFI calculations using broker APIs.
-- `src/advanced/pattern_recognition.py`: replace placeholders with rule-based or ML-driven chart-pattern detectors once you have annotated data.
 
 ### If you hit a merge conflict on GitHub
 - Prefer the version that keeps the Alpha Vantage+yfinance downloader and shared path utilities (for example, **accept the incoming change** in `src/data/download_data.py`).
 - Confirm post-merge that data still lands in `data/raw` and reports in `reports/`, and re-run `python -m compileall src`.
 - See `MERGE_GUIDE.md` for a concise checklist.
+
+## Advanced Modules
+
+### Pattern Recognition (`src/advanced/pattern_recognition.py`)
+The pattern recognition module provides rule-based detectors for common trading patterns:
+
+| Function | Description | Key Parameters |
+|----------|-------------|----------------|
+| `flag_liquidity_grab()` | Detects volume spikes with price reversals | `volume_threshold=2.0`, `reversal_threshold=0.005`, `lookback=5` |
+| `detect_fvg()` | Identifies fair value gaps between candles | `min_gap_percent=0.001`, `fill_lookforward=5` |
+| `asia_session_range_breakout()` | Marks breakouts from overnight range | `asia_start=0`, `asia_end=6`, `london_start=8`, `london_end=12` |
+
+**Example usage:**
+```python
+from src.advanced.pattern_recognition import flag_liquidity_grab, detect_fvg
+
+# Detect liquidity grabs
+liquidity_signals = flag_liquidity_grab(price_df, volume_threshold=2.0)
+
+# Detect fair value gaps
+fvg_signals = detect_fvg(price_df, min_gap_percent=0.001)
+```
+
+### Order Flow Scalping (`src/advanced/orderflow_scalping.py`)
+The order flow module integrates with broker APIs to fetch order book data and generate scalping signals:
+
+**Key components:**
+- `fetch_orderbook_snapshot()`: Fetches top-N bid/ask prices from Alpaca or Binance
+- `OrderFlowAlphaModel`: Generates signals based on OFI and momentum
+
+**Example usage:**
+```python
+from src.advanced.orderflow_scalping import fetch_orderbook_snapshot, OrderFlowAlphaModel
+
+# Fetch order book (requires API credentials)
+snapshot = fetch_orderbook_snapshot("AAPL", top_n=10, provider="alpaca")
+print(f"Mid price: {snapshot.mid_price}, Spread: {snapshot.spread}")
+
+# Train alpha model
+model = OrderFlowAlphaModel(ofi_weight=0.6, momentum_weight=0.4)
+model.fit(historical_orderbook_df)
+
+# Generate signal
+signal = model.predict_signal(latest_ofi=0.1, spread=0.01, depth_ratio=0.55)
+```
+
+### Reinforcement Learning (`src/advanced/reinforcement_learning.py`)
+Train RL agents using PPO or A2C algorithms from stable-baselines3:
+
+**Components:**
+- `TradingEnv`: Gymnasium environment simulating trading with transaction costs
+- `TradingEnvConfig`: Configuration dataclass for environment parameters
+- `train_rl_agent()`: Training function with customizable hyperparameters
+- `evaluate_agent()`: Evaluation function returning Sharpe, returns, and drawdown
+
+**CLI Usage:**
+```bash
+# Train PPO agent on AAPL data
+python market_forecasting.py train-rl --tickers AAPL --timesteps 50000
+
+# Train A2C agent with custom parameters
+python market_forecasting.py train-rl \
+    --tickers AAPL TSLA \
+    --algorithm A2C \
+    --timesteps 100000 \
+    --window-size 60 \
+    --output models/rl_agent.zip
+```
+
+**Python API:**
+```python
+from src.advanced.reinforcement_learning import TradingEnv, TradingEnvConfig, train_rl_agent
+
+# Create environment
+config = TradingEnvConfig(window_size=60, transaction_cost=0.0001)
+env = TradingEnv(prices=price_array, features=feature_array, config=config)
+
+# Train agent
+model = train_rl_agent(env, algorithm="PPO", total_timesteps=10000)
+
+# Use trained agent
+obs, _ = env.reset()
+action, _ = model.predict(obs)
+```
 
 ## Reports & Interpretation
 Each iteration stores Markdown summaries in `reports/iteration_X_results.md` and plots in `reports/figures/`. Review these artefacts alongside the notebooks to interpret model strengths, weaknesses, and improvement paths. Iteration 5 additionally logs cumulative PnL, Sharpe ratio, max drawdown, and hit rate for the dynamic strategy, while `src/risk/monte_carlo.py` produces equity/drawdown histograms and fan charts for stress-testing that strategy.
@@ -336,10 +433,9 @@ See also `CHANGELOG.md` for release notes and `MERGE_GUIDE.md` for conflict reso
 - **Random sample of ~20 S&P 500 stocks:** broadens cross-sectional variation and can improve generalisation of tabular models (Linear/LightGBM) if features are scaled by ticker. It also enables pseudo cross-sectional learning but may dilute performance on any single name. When sampling, keep walk-forward splits chronological per ticker and consider per-ticker normalisation to avoid large-cap/low-vol names dominating the loss.
 
 ## Future Extensions
-- **Microstructure Alpha:** Implement the order flow scalping module with real-time order book data, OFI features, and execution tactics.
-- **Pattern Recognition & ICT Concepts:** Replace the placeholder pattern detectors with rule-based or vision-based recognition of liquidity grabs, fair value gaps, and Asia session behaviours.
 - **Sentiment Fusion:** Integrate natural language processing pipelines for tweets, macro headlines, and alternative data. Consider transformer-based text encoders feeding into the time-series models.
-- **Reinforcement Learning:** Extend `advanced/reinforcement_learning.py` to train DQN/PPO agents that learn execution policies under realistic transaction cost models.
+- **Advanced RL:** Extend the RL module with multi-agent setups, portfolio optimization, and risk-constrained policies.
+- **Real-time Trading:** Connect the order flow module to live broker APIs for paper trading validation.
 
 ## Acknowledgements
-This project leverages open-source libraries (`pandas`, `scikit-learn`, `tensorflow`, `yfinance`) and builds upon academic literature on time-series forecasting, financial econometrics, and algorithmic trading. The structure is designed for rigorous experimentation, reproducibility, and transparency required for a dissertation project.
+This project leverages open-source libraries (`pandas`, `scikit-learn`, `tensorflow`, `yfinance`, `stable-baselines3`, `gymnasium`) and builds upon academic literature on time-series forecasting, financial econometrics, and algorithmic trading. The structure is designed for rigorous experimentation, reproducibility, and transparency required for a dissertation project.
