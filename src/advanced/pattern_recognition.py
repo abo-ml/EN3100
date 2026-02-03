@@ -170,10 +170,11 @@ def detect_fvg(
         # This creates a gap where the middle candle's range doesn't overlap
         prev_high = high.iloc[i - 2]
         curr_low = low.iloc[i]
-        mid_price = (prev_high + curr_low) / 2
+        # Use the midpoint of the gap range for percentage calculation
+        gap_midpoint = (prev_high + curr_low) / 2
 
         gap_size = curr_low - prev_high
-        if gap_size > 0 and gap_size / mid_price >= min_gap_percent:
+        if gap_size > 0 and gap_size / gap_midpoint >= min_gap_percent:
             # Check if gap is filled in the lookforward window
             filled = False
             for j in range(i + 1, min(i + 1 + fill_lookforward, n)):
@@ -186,9 +187,11 @@ def detect_fvg(
         # Bearish FVG: low of candle i-2 > high of candle i
         prev_low = low.iloc[i - 2]
         curr_high = high.iloc[i]
+        # Use the midpoint of the gap range for percentage calculation
+        gap_midpoint_bearish = (prev_low + curr_high) / 2
 
         gap_size = prev_low - curr_high
-        if gap_size > 0 and gap_size / mid_price >= min_gap_percent:
+        if gap_size > 0 and gap_size / gap_midpoint_bearish >= min_gap_percent:
             # Check if gap is filled in the lookforward window
             filled = False
             for j in range(i + 1, min(i + 1 + fill_lookforward, n)):

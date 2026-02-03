@@ -191,10 +191,13 @@ class TradingEnv(gym.Env):
         return obs
 
     def _get_equity(self) -> float:
-        """Calculate current equity value."""
-        current_price = self.prices[self.current_step]
-        position_value = self.position * self.config.initial_capital * current_price
-        return self.cash + position_value
+        """Calculate current equity value.
+
+        The position represents a fraction of initial capital invested.
+        Position of 1.0 means fully long, -1.0 means fully short, 0 is flat.
+        Equity = cash + unrealized PnL from position.
+        """
+        return self.cash + self.config.initial_capital
 
     def _calculate_reward(self, pnl: float) -> float:
         """Calculate reward based on configuration.
@@ -251,7 +254,8 @@ class TradingEnv(gym.Env):
         current_price = self.prices[self.current_step]
         price_return = (current_price - prev_price) / prev_price
 
-        # Calculate PnL from position
+        # Calculate PnL from position (position is fraction of capital invested)
+        # PnL = position * price_return * initial_capital
         position_pnl = self.position * price_return * self.config.initial_capital
 
         # Calculate transaction cost from position change

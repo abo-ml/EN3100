@@ -111,6 +111,9 @@ def test_rl_env_creates_and_runs():
     pytest.importorskip("gymnasium")
     from src.advanced.reinforcement_learning import TradingEnv, TradingEnvConfig
 
+    # Set seed for reproducible tests
+    np.random.seed(42)
+
     # Create sample data
     prices = np.random.randn(200).cumsum() + 100
     features = np.random.randn(200, 3)

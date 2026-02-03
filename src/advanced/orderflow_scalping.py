@@ -385,16 +385,11 @@ class OrderFlowAlphaModel:
         if momentum is not None:
             mom_zscore = (momentum - mom_mean) / mom_std
             mom_signal = np.tanh(mom_zscore)
-        else:
-            mom_signal = 0.0
-            # Shift all weight to OFI if no momentum
-            ofi_weight = 1.0
-            mom_weight = 0.0
-
-        if momentum is not None:
             ofi_weight = self.ofi_weight
             mom_weight = self.momentum_weight
         else:
+            mom_signal = 0.0
+            # Shift all weight to OFI if no momentum
             ofi_weight = 1.0
             mom_weight = 0.0
 
@@ -407,9 +402,11 @@ class OrderFlowAlphaModel:
         combined_signal += depth_adjustment
 
         # Dampen signal for wide spreads (less reliable in illiquid markets)
+        # Baseline spread threshold: 0.01 (1% of mid-price) is considered wide
+        # Spreads wider than this baseline reduce signal confidence
         if spread > 0:
-            # Normalize spread relative to some baseline (e.g., 0.01% of mid-price)
-            spread_penalty = min(spread / 0.01, 1.0) * 0.1
+            spread_baseline = 0.01  # 1% spread threshold
+            spread_penalty = min(spread / spread_baseline, 1.0) * 0.1
             combined_signal *= (1 - spread_penalty)
 
         # Clip to [-1, 1]
