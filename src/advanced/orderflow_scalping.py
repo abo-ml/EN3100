@@ -4,11 +4,13 @@ This module provides:
 - Order book snapshot fetching via Alpaca or Binance APIs
 - Order flow imbalance (OFI) calculations
 - Scalping signals based on short-term OFI and mid-price momentum
+- Order placement via Alpaca paper trading API
 
 Configuration:
     Set the following environment variables:
     - For Alpaca: APCA_API_KEY_ID, APCA_API_SECRET_KEY
     - For Binance: BINANCE_API_KEY, BINANCE_API_SECRET
+    - APCA_API_BASE_URL: (optional) defaults to paper trading URL
 """
 from __future__ import annotations
 
@@ -411,3 +413,118 @@ class OrderFlowAlphaModel:
 
         # Clip to [-1, 1]
         return float(np.clip(combined_signal, -1.0, 1.0))
+
+
+# ---------------------------------------------------------------------------
+# Alpaca Order Placement
+# ---------------------------------------------------------------------------
+
+
+def place_alpaca_order(
+    symbol: str,
+    qty: float,
+    side: str,
+    order_type: str = "market",
+    time_in_force: str = "day",
+) -> Dict[str, Any]:
+    """Send an order to Alpaca paper trading.
+
+    This function places an order using the Alpaca Trading API. By default, it
+    uses the paper trading base URL unless overridden via the APCA_API_BASE_URL
+    environment variable.
+
+    Parameters
+    ----------
+    symbol : str
+        The trading symbol (e.g., 'AAPL', 'MSFT').
+    qty : float
+        Number of shares to trade. Fractional shares are supported.
+    side : str
+        Order side: 'buy' or 'sell'.
+    order_type : str, default='market'
+        Order type: 'market', 'limit', 'stop', or 'stop_limit'.
+    time_in_force : str, default='day'
+        Time in force: 'day', 'gtc', 'opg', 'cls', 'ioc', or 'fok'.
+
+    Returns
+    -------
+    Dict[str, Any]
+        The JSON response from Alpaca containing order details.
+
+    Raises
+    ------
+    ValueError
+        If API keys are not configured or required parameters are invalid.
+    RuntimeError
+        If the API request fails.
+
+    Environment Variables
+    --------------------
+    - APCA_API_KEY_ID: Alpaca API key ID (required)
+    - APCA_API_SECRET_KEY: Alpaca API secret key (required)
+    - APCA_API_BASE_URL: API base URL (optional, defaults to paper trading URL)
+
+    Examples
+    --------
+    >>> import os
+    >>> os.environ["APCA_API_KEY_ID"] = "your_key"
+    >>> os.environ["APCA_API_SECRET_KEY"] = "your_secret"
+    >>> result = place_alpaca_order("AAPL", 10, "buy")
+    >>> print(result["id"])  # Order ID
+    """
+    try:
+        import requests
+    except ImportError:
+        raise ImportError(
+            "requests library required for API calls. Install with: pip install requests"
+        )
+
+    # Validate side
+    if side not in ("buy", "sell"):
+        raise ValueError(f"Invalid side '{side}'. Must be 'buy' or 'sell'.")
+
+    # Validate order_type
+    valid_order_types = ("market", "limit", "stop", "stop_limit")
+    if order_type not in valid_order_types:
+        raise ValueError(
+            f"Invalid order_type '{order_type}'. Must be one of {valid_order_types}."
+        )
+
+    # Validate time_in_force
+    valid_tif = ("day", "gtc", "opg", "cls", "ioc", "fok")
+    if time_in_force not in valid_tif:
+        raise ValueError(
+            f"Invalid time_in_force '{time_in_force}'. Must be one of {valid_tif}."
+        )
+
+    base_url = os.environ.get("APCA_API_BASE_URL", "https://paper-api.alpaca.markets")
+    key_id = os.environ.get("APCA_API_KEY_ID")
+    secret_key = os.environ.get("APCA_API_SECRET_KEY")
+
+    if not key_id or not secret_key:
+        raise ValueError(
+            "Alpaca API keys not configured. Set APCA_API_KEY_ID and "
+            "APCA_API_SECRET_KEY environment variables."
+        )
+
+    endpoint = f"{base_url}/v2/orders"
+    order = {
+        "symbol": symbol,
+        "qty": str(qty),
+        "side": side,
+        "type": order_type,
+        "time_in_force": time_in_force,
+    }
+    headers = {
+        "APCA-API-KEY-ID": key_id,
+        "APCA-API-SECRET-KEY": secret_key,
+        "Content-Type": "application/json",
+    }
+
+    try:
+        resp = requests.post(endpoint, json=order, headers=headers, timeout=30)
+        resp.raise_for_status()
+        return resp.json()
+    except requests.RequestException as e:
+        logger.error(f"Alpaca order placement failed: {e}")
+        raise RuntimeError(f"Failed to place order: {e}") from e
