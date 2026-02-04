@@ -251,3 +251,31 @@ def test_place_alpaca_order_successful_mock(monkeypatch):
     finally:
         os.environ.pop("APCA_API_KEY_ID", None)
         os.environ.pop("APCA_API_SECRET_KEY", None)
+
+
+def test_place_alpaca_order_api_error(monkeypatch):
+    """Test that place_alpaca_order raises RuntimeError on API failure."""
+    from src.advanced.orderflow_scalping import place_alpaca_order
+    import os
+    import requests
+
+    # Set test env vars
+    os.environ["APCA_API_KEY_ID"] = "test_key"
+    os.environ["APCA_API_SECRET_KEY"] = "test_secret"
+
+    # Mock response that raises an error
+    class MockResponse:
+        def raise_for_status(self):
+            raise requests.HTTPError("403 Forbidden")
+
+    def mock_post(*args, **kwargs):
+        return MockResponse()
+
+    monkeypatch.setattr(requests, "post", mock_post)
+
+    try:
+        with pytest.raises(RuntimeError, match="Failed to place order"):
+            place_alpaca_order("AAPL", 10, "buy")
+    finally:
+        os.environ.pop("APCA_API_KEY_ID", None)
+        os.environ.pop("APCA_API_SECRET_KEY", None)
