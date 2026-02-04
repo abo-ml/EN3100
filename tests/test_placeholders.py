@@ -138,6 +138,40 @@ def test_rl_env_creates_and_runs():
     assert "drawdown" in info
 
 
+def test_rl_env_equity_not_double_counted():
+    """Test that equity calculation does not double count initial_capital."""
+    pytest.importorskip("gymnasium")
+    from src.advanced.reinforcement_learning import TradingEnv, TradingEnvConfig
+
+    initial_capital = 10000.0
+    config = TradingEnvConfig(
+        window_size=30,
+        transaction_cost=0.0,  # No transaction costs for simpler verification
+        initial_capital=initial_capital,
+    )
+
+    # Use flat prices to isolate the equity calculation (no PnL from price changes)
+    prices = np.array([100.0] * 200)
+    features = np.zeros((200, 1))
+
+    env = TradingEnv(prices=prices, features=features, config=config)
+
+    # After reset, equity should equal initial_capital (not 2x)
+    obs, info = env.reset()
+    assert info["equity"] == initial_capital, (
+        f"Initial equity should be {initial_capital}, got {info['equity']}. "
+        "Equity may be double counting initial_capital."
+    )
+    assert env._get_equity() == initial_capital
+
+    # After a step with zero position, equity should remain initial_capital
+    obs, reward, _, _, info = env.step(np.array([0.0]))
+    assert info["equity"] == initial_capital
+
+    # total_return should be 0 when there's no gain/loss
+    assert info["total_return"] == 0.0
+
+
 def test_place_alpaca_order_missing_keys():
     """Test that place_alpaca_order raises ValueError when API keys are missing."""
     from src.advanced.orderflow_scalping import place_alpaca_order

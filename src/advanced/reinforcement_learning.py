@@ -195,9 +195,9 @@ class TradingEnv(gym.Env):
 
         The position represents a fraction of initial capital invested.
         Position of 1.0 means fully long, -1.0 means fully short, 0 is flat.
-        Equity = cash + unrealized PnL from position.
+        self.cash is initialized to initial_capital and updated with PnL each step.
         """
-        return self.cash + self.config.initial_capital
+        return self.cash
 
     def _calculate_reward(self, pnl: float) -> float:
         """Calculate reward based on configuration.
