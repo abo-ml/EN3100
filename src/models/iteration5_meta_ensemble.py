@@ -18,7 +18,7 @@ from src.evaluation.walkforward import aggregate_metrics, walk_forward_splits
 from src.models.iteration1_baseline import feature_columns, load_dataset
 from src.models.iteration3_lstm import build_lstm_regressor
 from src.models.iteration4_transformer import build_transformer_model
-from src.utils import REPORTS_DIR
+from src.utils import PROCESSED_DIR, REPORTS_DIR
 
 SEED = 42
 np.random.seed(SEED)

@@ -35,9 +35,6 @@ def split_train_validation(train_df: pd.DataFrame, val_fraction: float = 0.2) ->
 def tune_lightgbm(train_df: pd.DataFrame, features: List[str]) -> Dict:
     base_params = dict(
         objective="regression",
-        n_estimators=500,
-        learning_rate=0.05,
-        num_leaves=31,
         subsample=0.8,
         colsample_bytree=0.8,
         random_state=SEED,
