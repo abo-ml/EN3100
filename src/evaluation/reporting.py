@@ -21,13 +21,17 @@ def save_metrics_report(metrics_dict: Dict[str, float], path: Path) -> None:
 
 
 def _maybe_save_additional(fig: plt.Figure, primary_path: Path, fallback_name: str) -> None:
-    """Persist a duplicate copy of the figure when requested by tutorials/Colab."""
-
+    """Persist a duplicate copy of the figure when requested by tutorials/Colab.
+    
+    Only saves if a different explicit path (not just a filename) is provided.
+    """
     fallback_path = Path(fallback_name)
+    # Skip if fallback is just a filename (would save to cwd) - only save if it's a full path
+    if fallback_path.parent in (Path("."), Path("")):
+        return
     if fallback_path.resolve() == primary_path.resolve():
         return
-    if fallback_path.parent not in (Path("."), Path("")):
-        fallback_path.parent.mkdir(parents=True, exist_ok=True)
+    fallback_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(fallback_path, bbox_inches="tight")
 
 

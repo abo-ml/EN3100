@@ -187,11 +187,19 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
         group["macd_hist"] = group["macd_line"] - group["macd_signal"]
         group["rsi_14"] = rsi(group["close"])
         group["volatility_21"] = rolling_volatility(group["return_1d"], 21)
-        group["volume_zscore_63"] = rolling_volume_zscore(group["volume"], 63)
+        # Handle NaN volume for FX pairs by filling with 0 before zscore calculation
+        volume_series = group["volume"].fillna(0)
+        group["volume_zscore_63"] = rolling_volume_zscore(volume_series, 63).fillna(0.0)
         group["tsmom_252"] = time_series_momentum(group["close"], 252)
         swing_high, swing_low = swing_points(group["high"], group["low"])
-        group["swing_high"] = swing_high.ffill()
-        group["swing_low"] = swing_low.ffill()
+        # Reindex to group index to align sparse series, then fill NaNs.
+        # We use ffill first (forward propagate last known swing), then bfill for
+        # any remaining gaps at the start of the series, and finally fillna with
+        # the actual high/low if still missing.
+        swing_high = swing_high.reindex(group.index)
+        swing_low = swing_low.reindex(group.index)
+        group["swing_high"] = swing_high.ffill().bfill().fillna(group["high"])
+        group["swing_low"] = swing_low.ffill().bfill().fillna(group["low"])
 
         bid_vol = group.get("bid_volume", pd.Series(0.0, index=group.index)).astype(float)
         ask_vol = group.get("ask_volume", pd.Series(0.0, index=group.index)).astype(float)
@@ -235,7 +243,7 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
         group["ict_smt_asia"] = ict_smt_asia_window_feature()
         group["sentiment_score"] = group.get("sentiment_score", 0.0)
 
-        group["realised_vol_bucket"] = realised_volatility_bucket(group["volatility_21"].fillna(method="bfill"))
+        group["realised_vol_bucket"] = realised_volatility_bucket(group["volatility_21"].bfill())
         group["drawdown"] = rolling_drawdown(group["close"])
 
         feature_frames.append(group)
@@ -245,8 +253,21 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     features = pd.concat([features, regime_dummies], axis=1)
     features = features.drop(columns=["realised_vol_bucket"])
 
+    # Drop placeholder columns that are not useful as features (all NaN or constant)
+    placeholder_cols_to_drop = ["bid_price", "ask_price", "bid_volume", "ask_volume"]
+    features = features.drop(columns=[c for c in placeholder_cols_to_drop if c in features.columns], errors="ignore")
+
+    # Fill remaining NaN values in numeric columns to ensure models can train
+    # Volume is NaN for FX pairs - fill with 0
+    features["volume"] = features["volume"].fillna(0)
+
     features.sort_values(["ticker", "date"], inplace=True)
-    features = features.groupby("ticker").apply(lambda grp: grp.iloc[252:]).reset_index(drop=True)
+    # Filter to rows after the warm-up period per ticker
+    filtered_frames = []
+    for _ticker, grp in features.groupby("ticker"):
+        if len(grp) > 252:
+            filtered_frames.append(grp.iloc[252:])
+    features = pd.concat(filtered_frames, ignore_index=True) if filtered_frames else features
 
     targets = compute_targets(features)
     full_df = features.merge(targets, on=["ticker", "date"], how="inner")

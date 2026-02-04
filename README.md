@@ -70,6 +70,54 @@ The mixed-asset workflow remains the default path for the dissertation. The new 
 └── README.md
 ```
 
+## API Requirements Summary
+
+This section summarizes the APIs used by the project and which are required vs optional:
+
+### Required APIs
+
+| API | Purpose | Required For | Environment Variable |
+|-----|---------|--------------|---------------------|
+| **Alpha Vantage** | Daily OHLCV data for equities and FX | Core data download (unless using yfinance only) | `ALPHAVANTAGE_API_KEY` (preferred) or `ALPHA_VANTAGE_API_KEY` |
+
+> **Note:** If both `ALPHAVANTAGE_API_KEY` and `ALPHA_VANTAGE_API_KEY` are set, `ALPHAVANTAGE_API_KEY` takes precedence.
+
+### Optional APIs (for enhanced functionality)
+
+| API | Purpose | Use Case | Environment Variable |
+|-----|---------|----------|---------------------|
+| **News API** | News headlines for sentiment analysis | Enhanced sentiment features | `NEWSAPI_KEY` |
+| **FRED** | Federal Reserve economic data | Macro factor features | `FRED_API_KEY` |
+| **Alpaca** | Real-time order book data | Order flow features, live trading | `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY` |
+| **Binance** | Crypto order book data | Crypto order flow features | `BINANCE_API_KEY`, `BINANCE_API_SECRET` |
+
+### Minimum Viable Configuration
+
+The pipeline can run with **just Yahoo Finance** (no API key required) by using `--provider yfinance`:
+```bash
+python -m src.data.download_data \
+    --tickers AAPL EURUSD=X XAUUSD=X ^GSPC \
+    --start 2013-01-01 --end 2023-12-31 \
+    --provider yfinance
+```
+This is ideal for testing and development. For production/dissertation work, Alpha Vantage provides more reliable data.
+
+### What Works Without APIs
+
+- ✅ Data alignment (`align_data.py`) - uses local files
+- ✅ Feature engineering (`engineer_features.py`) - uses local files
+- ✅ All model iterations (1-5) - uses processed features
+- ✅ Monte Carlo risk analysis - uses iteration 5 outputs
+- ✅ Per-asset and 20-stock evaluations - uses processed features
+- ✅ Sentiment scoring (VADER/TextBlob) - local NLP libraries
+
+### What Requires APIs
+
+- 📡 Live data download - requires Alpha Vantage or yfinance internet access
+- 📡 Real-time order book - requires Alpaca/Binance credentials
+- 📡 Live news sentiment - requires News API key
+- 📡 FRED macro data - requires FRED API key (optional, yfinance works as fallback)
+
 ## Getting Started
 ### 1. Set up the environment
 ```bash
@@ -186,6 +234,71 @@ Key points for hosted notebooks:
   end of the session if you want to resume without repeating the downloads.
 - Keep API keys in environment variables or secret managers. Never hard-code credentials into
   notebooks before sharing or committing them.
+
+### Pre-Colab Checklist
+
+Before taking a zip of this repository into Google Colab, complete these steps:
+
+1. **Prepare API Keys** (have these ready to paste into Colab):
+   - Alpha Vantage API key (or use `--provider yfinance` for testing)
+   - (Optional) News API key for enhanced sentiment
+   - (Optional) FRED API key for macro data
+
+2. **Clean Up Local Artifacts** (optional, reduces zip size):
+   ```bash
+   rm -rf data/raw/*.parquet data/raw/*.csv
+   rm -rf data/processed/*.parquet data/processed/*.csv
+   rm -rf reports/figures/*.png
+   rm -rf __pycache__ .pytest_cache
+   ```
+
+3. **Create the Zip File**:
+   ```bash
+   cd ..  # move to parent directory
+   zip -r EN3100.zip EN3100 -x "*.git*" -x "*__pycache__*" -x "*.pytest_cache*"
+   ```
+
+4. **In Colab, Run This Complete Pipeline**:
+   ```python
+   # Mount Drive and extract
+   from google.colab import drive
+   drive.mount('/content/drive')
+   !unzip -o "/content/drive/MyDrive/EN3100.zip" -d "/content"
+   %cd /content/EN3100
+
+   # Install dependencies
+   !pip install -r requirements.txt -q
+
+   # Set API keys
+   import os
+   os.environ["ALPHAVANTAGE_API_KEY"] = "YOUR_KEY_HERE"  # Replace with your key
+
+   # Run the full pipeline
+   !python -m src.data.download_data --tickers AAPL EURUSD=X XAUUSD=X ^GSPC --start 2013-01-01 --end 2023-12-31 --provider alpha_vantage
+   !python -m src.data.align_data
+   !python -m src.features.engineer_features
+   !python -m src.models.iteration1_baseline
+   !python -m src.models.iteration1_1_svr
+   !python -m src.models.iteration2_ensemble
+   !python -m src.models.iteration2_1_lightgbm
+   !python -m src.models.iteration3_lstm
+   !python -m src.models.iteration4_transformer
+   !python -m src.models.iteration5_meta_ensemble
+   !python -m src.risk.monte_carlo
+   !python -m src.experiments.per_asset_evaluation
+
+   # For 20-stock evaluation (optional):
+   !python -m src.experiments.download_equity_universe --n 20 --start 2013-01-01 --end 2023-12-31 --provider yfinance
+   !python -m src.data.align_data --ticker-file data/reference/equity_universe_20.txt
+   !python -m src.features.engineer_features
+   !python -m src.experiments.evaluate_20_stock_all_iterations
+   ```
+
+5. **Save Results to Drive**:
+   ```python
+   !cp -r reports /content/drive/MyDrive/EN3100_reports/
+   !cp -r data/processed /content/drive/MyDrive/EN3100_data/
+   ```
 
 ## Per-asset evaluation (4-asset universe)
 Run the existing iterations per ticker while keeping the same walk-forward settings and feature set:
