@@ -138,6 +138,43 @@ def test_rl_env_creates_and_runs():
     assert "drawdown" in info
 
 
+def test_rl_env_equity_no_double_counting():
+    """Test that equity equals initial_capital after reset (no double counting).
+
+    This verifies the fix for double-counting capital in equity calculation.
+    Previously, _get_equity() returned self.cash + initial_capital, but
+    self.cash is already initialized to initial_capital, causing double counting.
+    """
+    pytest.importorskip("gymnasium")
+    from src.advanced.reinforcement_learning import TradingEnv, TradingEnvConfig
+
+    # Use constant prices to make PnL predictable
+    prices = np.array([100.0] * 100)
+    features = np.zeros((100, 1))
+
+    config = TradingEnvConfig(
+        window_size=30,
+        initial_capital=10000.0,
+        transaction_cost=0.0,  # Zero costs for simplicity
+    )
+    env = TradingEnv(prices=prices, features=features, config=config)
+
+    # After reset, equity should equal initial_capital (not 2x initial_capital)
+    obs, info = env.reset()
+    assert info["equity"] == config.initial_capital, (
+        f"After reset, equity should be {config.initial_capital}, "
+        f"got {info['equity']}"
+    )
+
+    # With flat price and no position change, equity should remain initial_capital
+    # Take a flat position (action=0)
+    obs, reward, _, _, info = env.step(np.array([0.0]))
+    assert info["equity"] == config.initial_capital, (
+        f"With flat prices and no position, equity should stay at "
+        f"{config.initial_capital}, got {info['equity']}"
+    )
+
+
 def test_place_alpaca_order_missing_keys():
     """Test that place_alpaca_order raises ValueError when API keys are missing."""
     from src.advanced.orderflow_scalping import place_alpaca_order
