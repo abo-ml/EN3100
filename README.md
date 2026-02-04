@@ -78,7 +78,9 @@ This section summarizes the APIs used by the project and which are required vs o
 
 | API | Purpose | Required For | Environment Variable |
 |-----|---------|--------------|---------------------|
-| **Alpha Vantage** | Daily OHLCV data for equities and FX | Core data download (unless using yfinance only) | `ALPHAVANTAGE_API_KEY` or `ALPHA_VANTAGE_API_KEY` |
+| **Alpha Vantage** | Daily OHLCV data for equities and FX | Core data download (unless using yfinance only) | `ALPHAVANTAGE_API_KEY` (preferred) or `ALPHA_VANTAGE_API_KEY` |
+
+> **Note:** If both `ALPHAVANTAGE_API_KEY` and `ALPHA_VANTAGE_API_KEY` are set, `ALPHAVANTAGE_API_KEY` takes precedence.
 
 ### Optional APIs (for enhanced functionality)
 

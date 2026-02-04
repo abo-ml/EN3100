@@ -192,11 +192,14 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
         group["volume_zscore_63"] = rolling_volume_zscore(volume_series, 63).fillna(0.0)
         group["tsmom_252"] = time_series_momentum(group["close"], 252)
         swing_high, swing_low = swing_points(group["high"], group["low"])
-        # Reindex to group index to align sparse series, then fill NaNs
+        # Reindex to group index to align sparse series, then fill NaNs.
+        # We use ffill first (forward propagate last known swing), then bfill for
+        # any remaining gaps at the start of the series, and finally fillna with
+        # the actual high/low if still missing.
         swing_high = swing_high.reindex(group.index)
         swing_low = swing_low.reindex(group.index)
-        group["swing_high"] = swing_high.bfill().ffill().fillna(group["high"])
-        group["swing_low"] = swing_low.bfill().ffill().fillna(group["low"])
+        group["swing_high"] = swing_high.ffill().bfill().fillna(group["high"])
+        group["swing_low"] = swing_low.ffill().bfill().fillna(group["low"])
 
         bid_vol = group.get("bid_volume", pd.Series(0.0, index=group.index)).astype(float)
         ask_vol = group.get("ask_volume", pd.Series(0.0, index=group.index)).astype(float)
