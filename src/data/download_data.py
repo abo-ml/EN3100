@@ -1,10 +1,10 @@
 """Data acquisition utilities for downloading historical OHLCV data.
 
-This module handles interaction with Alpha Vantage (primary) and Yahoo Finance
-as a fallback, performs basic cleaning, and stores the results under
-``data/raw`` for subsequent processing. Hooks are included for integrating
-higher-frequency order book data from broker APIs. The functions are designed
-for reproducibility in the accompanying dissertation project.
+This module handles interaction with Alpha Vantage (primary), Yahoo Finance,
+and optionally Stooq as fallbacks. It performs basic cleaning, and stores the
+results under ``data/raw`` for subsequent processing. Hooks are included for
+integrating higher-frequency order book data from broker APIs. The functions
+are designed for reproducibility in the accompanying dissertation project.
 """
 from __future__ import annotations
 
@@ -27,9 +27,22 @@ except ImportError:  # pragma: no cover
     ForeignExchange = None
     TimeSeries = None
 
+# Optional dependency for Stooq fallback provider
+try:  # pragma: no cover
+    from pandas_datareader import data as pdr
+    HAS_PANDAS_DATAREADER = True
+except (ImportError, TypeError):  # pragma: no cover
+    # TypeError can occur with incompatible pandas versions
+    pdr = None
+    HAS_PANDAS_DATAREADER = False
+
 from ..utils import RAW_DATA_DIR
 RAW_DATA_DIR = Path("data/raw")
 LOGGER = logging.getLogger(__name__)
+
+# Known tickers that require premium Alpha Vantage subscription.
+# These will automatically skip Alpha Vantage and use yfinance/stooq instead.
+PREMIUM_ONLY_TICKERS = {"AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "META", "TSLA", "NVDA"}
 
 
 @dataclass
@@ -92,18 +105,71 @@ def _log_warning(message: str) -> None:
     LOGGER.warning(message)
 
 
+def _get_api_key(config: DownloadConfig, provider: str) -> Optional[str]:
+    """Get API key for the specified provider with clear warning if missing.
+
+    For Alpha Vantage, checks config.api_key, then ALPHAVANTAGE_API_KEY,
+    then ALPHA_VANTAGE_API_KEY environment variables.
+    """
+    if provider == "alpha_vantage":
+        api_key = config.api_key or os.environ.get("ALPHAVANTAGE_API_KEY") or os.environ.get(
+            "ALPHA_VANTAGE_API_KEY"
+        )
+        if not api_key:
+            LOGGER.warning(
+                "Alpha Vantage API key not configured. "
+                "Set ALPHAVANTAGE_API_KEY or ALPHA_VANTAGE_API_KEY environment variable, "
+                "or pass --api-key on the command line. "
+                "Falling back to other providers."
+            )
+        elif not api_key.strip():
+            LOGGER.warning(
+                "Alpha Vantage API key is empty. "
+                "Ensure ALPHAVANTAGE_API_KEY or ALPHA_VANTAGE_API_KEY contains a valid key."
+            )
+            return None
+        return api_key
+    return None
+
+
+def _ensure_timezone_naive(series: pd.Series) -> pd.Series:
+    """Ensure a datetime series is timezone-naive.
+
+    Handles both timezone-aware and timezone-naive datetimes correctly.
+    """
+    series = pd.to_datetime(series)
+    if series.dt.tz is not None:
+        series = series.dt.tz_localize(None)
+    return series
+
+
+def _convert_ohlcv_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert OHLCV column names to lowercase, excluding Close/Adj Close.
+
+    Maps Open→open, High→high, Low→low, Volume→volume.
+    Close and Adj Close are handled separately to support special logic.
+    """
+    rename_map = {
+        "Open": "open",
+        "High": "high",
+        "Low": "low",
+        "Volume": "volume",
+    }
+    return df.rename(columns=rename_map)
+
+
 def _basic_clean_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     """Perform basic cleaning on OHLCV data (forward fill and drop NaN close)."""
-    df = df.ffill().dropna(subset=["close"] if "close" in df.columns else ["Close"])
+    df = df.ffill()
+    if "close" in df.columns:
+        df = df.dropna(subset=["close"])
     return df
 
 
 def _alpha_vantage_equity(ticker: str, config: DownloadConfig) -> pd.DataFrame:
     """Download daily OHLCV data for equities via Alpha Vantage."""
 
-    api_key = config.api_key or os.environ.get("ALPHAVANTAGE_API_KEY") or os.environ.get(
-        "ALPHA_VANTAGE_API_KEY"
-    )
+    api_key = _get_api_key(config, "alpha_vantage")
     if not api_key:
         raise ValueError(
             "Alpha Vantage API key not provided. Set --api-key or ALPHAVANTAGE_API_KEY/ALPHA_VANTAGE_API_KEY."
@@ -138,9 +204,7 @@ def _alpha_vantage_equity(ticker: str, config: DownloadConfig) -> pd.DataFrame:
 def _alpha_vantage_fx(pair: str, config: DownloadConfig) -> pd.DataFrame:
     """Download FX/metals daily data via Alpha Vantage."""
 
-    api_key = config.api_key or os.environ.get("ALPHAVANTAGE_API_KEY") or os.environ.get(
-        "ALPHA_VANTAGE_API_KEY"
-    )
+    api_key = _get_api_key(config, "alpha_vantage")
     if not api_key:
         raise ValueError(
             "Alpha Vantage API key not provided. Set --api-key or ALPHAVANTAGE_API_KEY/ALPHA_VANTAGE_API_KEY."
@@ -196,9 +260,13 @@ def _download_alpha_vantage(ticker: str, config: DownloadConfig) -> pd.DataFrame
     return data
 
 
-def _download_yfinance(ticker: str, config: DownloadConfig) -> pd.DataFrame:
-    """Download OHLCV data via yfinance."""
+def _download_yfinance(ticker: str, config: DownloadConfig) -> Optional[pd.DataFrame]:
+    """Download OHLCV data via yfinance.
+
+    Returns None if data is empty or required columns are missing.
+    """
     LOGGER.info("Downloading %s via yfinance", ticker)
+    # Step 1: Call yfinance download
     data = yf.download(
         ticker,
         start=config.start,
@@ -206,38 +274,143 @@ def _download_yfinance(ticker: str, config: DownloadConfig) -> pd.DataFrame:
         interval=config.interval,
         progress=False,
     )
+    # Step 2: If empty, return None
     if data.empty:
-        raise ValueError(f"No data returned for {ticker}")
-    data = data.rename(columns=str.lower)
-    data.index = data.index.tz_localize(None)
+        LOGGER.warning("No data returned for %s from yfinance", ticker)
+        return None
+
+    # Step 3: Reset index and rename Date to date
     data.reset_index(inplace=True)
-    data.rename(columns={"index": "date"}, inplace=True)
-    if "adj close" in data.columns:
-        data.rename(columns={"adj close": "adj_close"}, inplace=True)
+    # Handle both 'Date' (typical) and 'index' (after reset)
+    if "Date" in data.columns:
+        data.rename(columns={"Date": "date"}, inplace=True)
+    elif "index" in data.columns:
+        data.rename(columns={"index": "date"}, inplace=True)
+
+    if "date" not in data.columns:
+        LOGGER.warning("Downloaded data missing 'date' column for %s", ticker)
+        return None
+
+    # Ensure date is timezone-naive
+    data["date"] = _ensure_timezone_naive(data["date"])
+
+    # Step 4: Convert OHLCV columns to lowercase (excluding Close/Adj Close)
+    data = _convert_ohlcv_columns(data)
+
+    # Step 5: Create "close" and "adj_close" columns
+    if "Adj Close" in data.columns:
+        data["close"] = data["Adj Close"]
+        data["adj_close"] = data["Adj Close"]
+    elif "Close" in data.columns:
+        data["close"] = data["Close"]
+        data["adj_close"] = data["Close"]
     else:
-        data["adj_close"] = data["close"]
+        LOGGER.warning("Downloaded data missing 'Close' or 'Adj Close' for %s", ticker)
+        return None
+
+    # Ensure volume column exists
     if "volume" not in data.columns:
         data["volume"] = np.nan
-    if "date" not in data.columns:
-        raise ValueError("Downloaded data missing 'date' column")
-    data["ticker"] = ticker
+
+    # Step 6: Sort by date, forward-fill missing values, drop rows where close is NaN
     data.sort_values("date", inplace=True)
+    data = data.ffill()
+    data = data.dropna(subset=["close"])
+
+    # Add ticker column
+    data["ticker"] = ticker
+
+    # Step 7: Return the cleaned DataFrame
+    return data
+
+
+def _download_stooq(ticker: str, config: DownloadConfig) -> Optional[pd.DataFrame]:
+    """Download OHLCV data via Stooq (pandas_datareader fallback).
+
+    Stooq provides free data for many tickers when Alpha Vantage and yfinance fail.
+    Requires pandas_datareader to be installed: pip install pandas_datareader>=0.10
+
+    Returns None if data is empty or pandas_datareader is not installed.
+    """
+    if not HAS_PANDAS_DATAREADER:
+        LOGGER.warning("pandas_datareader not installed, cannot use Stooq provider")
+        return None
+
+    LOGGER.info("Downloading %s via Stooq", ticker)
+    try:
+        data = pdr.DataReader(ticker, "stooq", start=config.start, end=config.end)
+    except Exception as e:
+        LOGGER.warning("Stooq download failed for %s: %s", ticker, e)
+        return None
+
+    if data.empty:
+        LOGGER.warning("No data returned for %s from Stooq", ticker)
+        return None
+
+    # Stooq returns data in descending order, so sort ascending
+    data = data.sort_index()
+    data.reset_index(inplace=True)
+    data.rename(columns={"Date": "date"}, inplace=True)
+
+    if "date" not in data.columns:
+        LOGGER.warning("Downloaded data missing 'date' column for %s", ticker)
+        return None
+
+    # Ensure date is timezone-naive
+    data["date"] = _ensure_timezone_naive(data["date"])
+
+    # Convert OHLCV columns to lowercase
+    data = _convert_ohlcv_columns(data)
+
+    # Create close and adj_close columns
+    if "Close" in data.columns:
+        data["close"] = data["Close"]
+        data["adj_close"] = data["Close"]  # Stooq doesn't provide adjusted close
+    else:
+        LOGGER.warning("Downloaded data missing 'Close' for %s", ticker)
+        return None
+
+    if "volume" not in data.columns:
+        data["volume"] = np.nan
+
+    # Sort by date, forward-fill missing values, drop rows where close is NaN
+    data.sort_values("date", inplace=True)
+    data = data.ffill()
+    data = data.dropna(subset=["close"])
+
+    data["ticker"] = ticker
     return data
 
 
 def download_single_ticker(ticker: str, config: DownloadConfig) -> pd.DataFrame:
     """Download OHLCV data for a single ticker with provider fallback.
 
-    Iterates over providers (default: alpha_vantage, yfinance) and returns the first
-    successful download. Each provider is tried up to max_retries times.
+    Iterates over providers (default: alpha_vantage, yfinance, stooq) and returns
+    the first successful download. Premium-only tickers (e.g., AAPL) automatically
+    skip Alpha Vantage to avoid premium endpoint errors. Stooq is used as a final
+    fallback if pandas_datareader is installed.
     """
     last_err: Optional[Exception] = None
-    for provider in getattr(config, "providers", None) or ["alpha_vantage", "yfinance"]:
+    # Default provider order: alpha_vantage, yfinance, stooq (if installed)
+    default_providers = ["alpha_vantage", "yfinance"]
+    if HAS_PANDAS_DATAREADER:
+        default_providers.append("stooq")
+    providers = getattr(config, "providers", None) or default_providers
+
+    for provider in providers:
         try:
             if provider == "alpha_vantage":
+                # Skip Alpha Vantage for known premium-only tickers
+                if ticker.upper() in PREMIUM_ONLY_TICKERS:
+                    LOGGER.info(
+                        "Skipping Alpha Vantage for %s (premium-only ticker)", ticker
+                    )
+                    continue
                 df = _download_alpha_vantage(ticker, config)
             elif provider == "yfinance":
                 df = _download_yfinance(ticker, config)
+            elif provider == "stooq":
+                df = _download_stooq(ticker, config)
             else:
                 raise ValueError(f"Unknown provider: {provider}")
             if df is None or df.empty:
