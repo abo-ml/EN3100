@@ -132,6 +132,17 @@ def _get_api_key(config: DownloadConfig, provider: str) -> Optional[str]:
     return None
 
 
+def _ensure_timezone_naive(series: pd.Series) -> pd.Series:
+    """Ensure a datetime series is timezone-naive.
+
+    Handles both timezone-aware and timezone-naive datetimes correctly.
+    """
+    series = pd.to_datetime(series)
+    if series.dt.tz is not None:
+        series = series.dt.tz_localize(None)
+    return series
+
+
 def _convert_ohlcv_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Convert OHLCV column names to lowercase, excluding Close/Adj Close.
 
@@ -281,7 +292,7 @@ def _download_yfinance(ticker: str, config: DownloadConfig) -> Optional[pd.DataF
         return None
 
     # Ensure date is timezone-naive
-    data["date"] = pd.to_datetime(data["date"]).dt.tz_localize(None)
+    data["date"] = _ensure_timezone_naive(data["date"])
 
     # Step 4: Convert OHLCV columns to lowercase (excluding Close/Adj Close)
     data = _convert_ohlcv_columns(data)
@@ -346,7 +357,7 @@ def _download_stooq(ticker: str, config: DownloadConfig) -> Optional[pd.DataFram
         return None
 
     # Ensure date is timezone-naive
-    data["date"] = pd.to_datetime(data["date"]).dt.tz_localize(None)
+    data["date"] = _ensure_timezone_naive(data["date"])
 
     # Convert OHLCV columns to lowercase
     data = _convert_ohlcv_columns(data)

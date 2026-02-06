@@ -84,6 +84,20 @@ def test_basic_clean_ohlcv_forward_fills():
     assert len(result) == 3
 
 
+def test_basic_clean_ohlcv_drops_nan_close():
+    """Test that _basic_clean_ohlcv drops rows with NaN close after forward-fill."""
+    df = pd.DataFrame({
+        "date": pd.to_datetime(["2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05"]),
+        "close": [None, 1.0, None, 1.5],  # First row has NaN, can't forward-fill
+        "open": [1.0, 1.0, 1.5, 1.5],
+    })
+    result = dd._basic_clean_ohlcv(df)
+    # First row should be dropped (NaN cannot be forward-filled from nothing)
+    # But forward-fill will fill the third row from second
+    assert len(result) == 3
+    assert result["close"].iloc[0] == 1.0
+
+
 def test_download_yfinance_returns_none_on_empty(monkeypatch):
     """Test that _download_yfinance returns None for empty data."""
     import yfinance as yf
