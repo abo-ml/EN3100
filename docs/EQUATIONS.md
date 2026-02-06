@@ -37,7 +37,11 @@ This document collects the mathematical definitions used throughout the EN3100 d
 - **MA crossover flags:**
   - Bullish: $\mathbb{1}(\text{MA}_{10}(P^{\text{close}})_t > \text{MA}_{50}(P^{\text{close}})_t \land \text{MA}_{10}(P^{\text{close}})_{t-1} \le \text{MA}_{50}(P^{\text{close}})_{t-1})$
   - Bearish: analogous with the inequality reversed.
-- **ICT/SMT/Asia placeholder:** conceptual feature reserved for liquidity grabs and session-based imbalances (no formal equation until annotated intraday data is available).
+- **Head-and-shoulders detection:** Identifies triplets of consecutive peaks where the middle peak (head) exceeds both shoulders by at least a `tolerance` threshold (default 2%). The pattern is marked at the right shoulder.
+- **Double-top/bottom detection:** Identifies pairs of consecutive peaks (or troughs) at similar heights (within `tolerance`), with a significant trough (or peak) between them.
+- **Liquidity grab:** Detects volume spikes (above `volume_threshold` × rolling average) combined with price reversal patterns (close position > 0.7 for bullish or < 0.3 for bearish) and significant price movement.
+- **Fair Value Gap (FVG):** Bullish when $P_{t-2}^{\text{high}} < P_t^{\text{low}}$; bearish when $P_{t-2}^{\text{low}} > P_t^{\text{high}}$. Gap must exceed `min_gap_percent` (default 0.1%) and remain unfilled for `fill_lookforward` bars.
+- **Asia session breakout:** For daily data, uses previous day's range as proxy. Bullish breakout when $P_t^{\text{close}} > P_{t-1}^{\text{high}}$; bearish when $P_t^{\text{close}} < P_{t-1}^{\text{low}}$.
 
 ## Order flow and liquidity features
 - **Order Flow Imbalance (OFI):** $\text{OFI}_t = \dfrac{\text{bidVol}_t - \text{askVol}_t}{\text{bidVol}_t + \text{askVol}_t + \varepsilon}$
