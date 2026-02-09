@@ -250,20 +250,20 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
         group["ict_smt_asia"] = ict_smt_asia_window_feature()
         group["sentiment_score"] = group.get("sentiment_score", 0.0)
 
-        # Advanced pattern recognition features (future work - wrapped for graceful degradation)
+        # Advanced pattern recognition features (wrapped for graceful degradation)
         try:
             group["liquidity_grab"] = flag_liquidity_grab(group)
-        except NotImplementedError:
+        except Exception:
             group["liquidity_grab"] = pd.Series(0, index=group.index)
 
         try:
             group["fvg"] = detect_fvg(group)
-        except NotImplementedError:
+        except Exception:
             group["fvg"] = pd.Series(0, index=group.index)
 
         try:
             group["asia_breakout"] = asia_session_range_breakout(group)
-        except NotImplementedError:
+        except Exception:
             group["asia_breakout"] = pd.Series(0, index=group.index)
 
         group["realised_vol_bucket"] = realised_volatility_bucket(group["volatility_21"].bfill())

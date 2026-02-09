@@ -39,9 +39,9 @@ This document collects the mathematical definitions used throughout the EN3100 d
   - Bearish: analogous with the inequality reversed.
 - **Head-and-shoulders detection** (`pattern_head_shoulders`): Identifies triplets of consecutive peaks where the middle peak (head) exceeds both shoulders by at least a `tolerance` threshold (default 2%). The pattern is marked at the right shoulder.
 - **Double-top/bottom detection** (`pattern_double_top`, `pattern_double_bottom`): Identifies pairs of consecutive peaks (or troughs) at similar heights (within `tolerance`), with a significant trough (or peak) between them.
-- **Liquidity grab:** Detects volume spikes (above `volume_threshold` × rolling average) combined with price reversal patterns (close position > 0.7 for bullish or < 0.3 for bearish) and significant price movement.
-- **Fair Value Gap (FVG):** Bullish when $P_{t-2}^{\text{high}} < P_t^{\text{low}}$; bearish when $P_{t-2}^{\text{low}} > P_t^{\text{high}}$. Gap must exceed `min_gap_percent` (default 0.1%) and remain unfilled for `fill_lookforward` bars.
-- **Asia session breakout** (`ict_smt_asia`): For daily data, uses previous day's range as proxy. Bullish breakout when $P_t^{\text{close}} > P_{t-1}^{\text{high}}$; bearish when $P_t^{\text{close}} < P_{t-1}^{\text{low}}$.
+- **Liquidity grab** (`liquidity_grab`): Detects volume spikes (above `volume_threshold` × rolling average) combined with price reversal patterns (close position > 0.7 for bullish or < 0.3 for bearish) and significant price movement. Returns 1 when a liquidity grab is detected, 0 otherwise. Operates on standard OHLCV data.
+- **Fair Value Gap (FVG)** (`fvg`): Bullish when $P_{t-2}^{\text{high}} < P_t^{\text{low}}$; bearish when $P_{t-2}^{\text{low}} > P_t^{\text{high}}$. Gap must exceed `min_gap_percent` (default 0.1%) and remain unfilled for `fill_lookforward` bars. Returns 1 for bullish FVG, -1 for bearish FVG, 0 otherwise.
+- **Asia session breakout** (`asia_breakout`): For daily data, uses previous day's range as proxy. Bullish breakout when $P_t^{\text{close}} > P_{t-1}^{\text{high}}$; bearish when $P_t^{\text{close}} < P_{t-1}^{\text{low}}$. For intraday data, computes the overnight (Asia session) range and marks London session bars as 1 if close > overnight high or -1 if close < overnight low.
 
 ## Order flow and liquidity features
 - **Order Flow Imbalance** (`ofi`): $\text{OFI}_t = \dfrac{\text{bidVol}_t - \text{askVol}_t}{\text{bidVol}_t + \text{askVol}_t + \varepsilon}$

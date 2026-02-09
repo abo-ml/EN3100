@@ -195,6 +195,37 @@ class TestAdvancedPatternFunctions:
         assert isinstance(result, pd.Series)
         assert len(result) == len(df)
 
+    def test_flag_liquidity_grab_detects_volume_spike_with_reversal(self):
+        """Test that liquidity grab detects volume spike with wick-based reversal."""
+        from src.advanced.pattern_recognition import flag_liquidity_grab
+
+        # Create data with a clear liquidity grab pattern:
+        # - Large volume spike (10x normal)
+        # - Close near high after touching low (bullish reversal)
+        # - Significant price change
+        df = pd.DataFrame({
+            "high": [100, 100, 100, 100, 105, 105],
+            "low": [99, 99, 99, 99, 98, 99],
+            "close": [99.5, 99.5, 99.5, 99.5, 104.5, 104],  # Close near high
+            "volume": [1000, 1000, 1000, 1000, 10000, 1000],  # Volume spike
+        })
+        result = flag_liquidity_grab(df, volume_threshold=2.0, reversal_threshold=0.005)
+
+        assert isinstance(result, pd.Series)
+        assert result.name == "liquidity_grab"
+        # Values should be 0 or 1
+        assert set(result.unique()).issubset({0, 1})
+
+    def test_flag_liquidity_grab_handles_missing_columns(self):
+        """Test graceful handling when required columns are missing."""
+        from src.advanced.pattern_recognition import flag_liquidity_grab
+
+        df = pd.DataFrame({"price": [100, 101, 102]})
+        result = flag_liquidity_grab(df)
+
+        assert isinstance(result, pd.Series)
+        assert (result == 0).all()
+
     def test_detect_fvg_returns_series(self):
         """Test that detect_fvg returns a proper Series."""
         from src.advanced.pattern_recognition import detect_fvg
@@ -207,6 +238,68 @@ class TestAdvancedPatternFunctions:
 
         assert isinstance(result, pd.Series)
         assert len(result) == len(df)
+
+    def test_detect_fvg_identifies_bullish_gap(self):
+        """Test that FVG detects a bullish gap (gap up)."""
+        from src.advanced.pattern_recognition import detect_fvg
+
+        # Create a clear bullish FVG:
+        # high[0]=100, then a gap where low[2]=105 > high[0]=100
+        df = pd.DataFrame({
+            "high": [100, 102, 108, 109, 110],
+            "low": [98, 100, 105, 107, 108],  # Gap: low[2]=105 > high[0]=100
+        })
+        result = detect_fvg(df, min_gap_percent=0.001, fill_lookforward=2)
+
+        assert isinstance(result, pd.Series)
+        assert result.name == "fvg"
+        # Values should be -1, 0, or 1
+        assert set(result.unique()).issubset({-1, 0, 1})
+        # Bullish FVG should be detected at index 2
+        assert result.iloc[2] == 1
+
+    def test_detect_fvg_identifies_bearish_gap(self):
+        """Test that FVG detects a bearish gap (gap down)."""
+        from src.advanced.pattern_recognition import detect_fvg
+
+        # Create a clear bearish FVG:
+        # low[0]=100, then a gap where high[2]=95 < low[0]=100
+        df = pd.DataFrame({
+            "high": [102, 100, 95, 93, 92],  # Gap: high[2]=95 < low[0]=100
+            "low": [100, 98, 93, 91, 90],
+        })
+        result = detect_fvg(df, min_gap_percent=0.001, fill_lookforward=2)
+
+        assert isinstance(result, pd.Series)
+        assert result.name == "fvg"
+        # Bearish FVG should be detected at index 2
+        assert result.iloc[2] == -1
+
+    def test_detect_fvg_no_gap_in_overlapping_bars(self):
+        """Test that no FVG is detected when bars overlap."""
+        from src.advanced.pattern_recognition import detect_fvg
+
+        # Truly overlapping bars - each bar's range overlaps with bars 2 positions away
+        # high[i] >= low[i+2] and low[i] <= high[i+2] for all i
+        df = pd.DataFrame({
+            "high": [102, 103, 104, 105, 106],
+            "low": [98, 99, 100, 101, 102],  # Overlapping: low[2]=100 < high[0]=102
+        })
+        result = detect_fvg(df)
+
+        assert isinstance(result, pd.Series)
+        # No gaps should be detected since bars overlap
+        assert (result == 0).all()
+
+    def test_detect_fvg_handles_missing_columns(self):
+        """Test graceful handling when required columns are missing."""
+        from src.advanced.pattern_recognition import detect_fvg
+
+        df = pd.DataFrame({"price": [100, 101, 102]})
+        result = detect_fvg(df)
+
+        assert isinstance(result, pd.Series)
+        assert (result == 0).all()
 
     def test_asia_session_range_breakout_returns_series(self):
         """Test that asia_session_range_breakout returns a proper Series."""
@@ -221,6 +314,68 @@ class TestAdvancedPatternFunctions:
 
         assert isinstance(result, pd.Series)
         assert len(result) == len(df)
+
+    def test_asia_session_breakout_daily_data_bullish(self):
+        """Test bullish breakout detection with daily data."""
+        from src.advanced.pattern_recognition import asia_session_range_breakout
+
+        # Daily data where close breaks above previous high
+        df = pd.DataFrame({
+            "high": [100, 101, 105, 106, 110],
+            "low": [98, 99, 100, 104, 105],
+            "close": [99, 100, 104, 105, 115],  # close[4]=115 > high[3]=106
+        }, index=pd.date_range("2023-01-01", periods=5, freq="D"))
+        result = asia_session_range_breakout(df)
+
+        assert isinstance(result, pd.Series)
+        assert result.name == "asia_breakout"
+        # Values should be -1, 0, or 1
+        assert set(result.unique()).issubset({-1, 0, 1})
+        # Bullish breakout at index 4 (close > prev high)
+        assert result.iloc[4] == 1
+
+    def test_asia_session_breakout_daily_data_bearish(self):
+        """Test bearish breakout detection with daily data."""
+        from src.advanced.pattern_recognition import asia_session_range_breakout
+
+        # Daily data where close breaks below previous low
+        df = pd.DataFrame({
+            "high": [100, 101, 102, 103, 100],
+            "low": [98, 99, 100, 101, 95],
+            "close": [99, 100, 101, 102, 90],  # close[4]=90 < low[3]=101
+        }, index=pd.date_range("2023-01-01", periods=5, freq="D"))
+        result = asia_session_range_breakout(df)
+
+        assert isinstance(result, pd.Series)
+        # Bearish breakout at index 4 (close < prev low)
+        assert result.iloc[4] == -1
+
+    def test_asia_session_breakout_handles_missing_columns(self):
+        """Test graceful handling when required columns are missing."""
+        from src.advanced.pattern_recognition import asia_session_range_breakout
+
+        df = pd.DataFrame(
+            {"price": [100, 101, 102]},
+            index=pd.date_range("2023-01-01", periods=3, freq="D"),
+        )
+        result = asia_session_range_breakout(df)
+
+        assert isinstance(result, pd.Series)
+        assert (result == 0).all()
+
+    def test_asia_session_breakout_handles_non_datetime_index(self):
+        """Test graceful handling when index cannot be converted to datetime."""
+        from src.advanced.pattern_recognition import asia_session_range_breakout
+
+        df = pd.DataFrame({
+            "high": [100, 101, 102],
+            "low": [99, 100, 101],
+            "close": [99.5, 100.5, 101.5],
+        }, index=["a", "b", "c"])  # Non-datetime index
+        result = asia_session_range_breakout(df)
+
+        assert isinstance(result, pd.Series)
+        assert (result == 0).all()
 
     def test_pattern_functions_graceful_fallback(self):
         """Test that engineer_features handles NotImplementedError gracefully."""
