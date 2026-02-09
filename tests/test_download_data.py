@@ -1,3 +1,5 @@
+import types
+
 import pandas as pd
 import src.data.download_data as dd
 
@@ -351,8 +353,6 @@ def test_download_yfinance_timezone_aware_date(monkeypatch):
 
 def test_download_fred_returns_data_for_gspc(monkeypatch):
     """Test that _download_fred returns data for ^GSPC using SP500 series."""
-    import types
-    
     # Create a mock pdr module
     def mock_datareader(series, source, start, end):
         assert series == "SP500"
@@ -379,8 +379,6 @@ def test_download_fred_returns_data_for_gspc(monkeypatch):
 
 def test_download_fred_returns_data_for_xauusd(monkeypatch):
     """Test that _download_fred returns data for XAUUSD=X using GOLDAMGBD228NLBM series."""
-    import types
-    
     def mock_datareader(series, source, start, end):
         assert series == "GOLDAMGBD228NLBM"
         assert source == "fred"
@@ -418,8 +416,6 @@ def test_download_fred_returns_none_when_no_pandas_datareader(monkeypatch):
 
 def test_download_fred_handles_empty_data(monkeypatch):
     """Test that _download_fred returns None for empty data."""
-    import types
-    
     def mock_datareader(series, source, start, end):
         return pd.DataFrame()
 

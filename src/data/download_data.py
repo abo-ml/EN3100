@@ -523,6 +523,8 @@ def _download_fred(ticker: str, config: DownloadConfig) -> Optional[pd.DataFrame
     data["open"] = np.nan
     data["high"] = np.nan
     data["low"] = np.nan
+    # FRED provides index-level data (SP500, gold prices) which doesn't have stock splits,
+    # so close and adj_close are equivalent.
     data["adj_close"] = data["close"]
     data["volume"] = np.nan
 
