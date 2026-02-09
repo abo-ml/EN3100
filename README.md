@@ -94,6 +94,15 @@ This section summarizes the APIs used by the project and which are required vs o
 | **Binance** | Crypto order book data | Crypto order flow features | `BINANCE_API_KEY`, `BINANCE_API_SECRET` |
 | **Stooq** (via pandas_datareader) | Free OHLCV data fallback | Fallback when Alpha Vantage and yfinance fail | No API key required |
 
+> **Quick Reference – Environment Variables:**
+> ```bash
+> export ALPHAVANTAGE_API_KEY="your-alpha-vantage-key"
+> export FRED_API_KEY="your-fred-key"            # optional, for macro data
+> export APCA_API_KEY_ID="your-alpaca-key"       # optional, for order book
+> export APCA_API_SECRET_KEY="your-alpaca-secret"
+> export APCA_API_BASE_URL="https://paper-api.alpaca.markets"
+> ```
+
 ### Minimum Viable Configuration
 
 The pipeline can run with **just Yahoo Finance** (no API key required) by using `--provider yfinance`:

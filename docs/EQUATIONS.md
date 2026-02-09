@@ -17,7 +17,7 @@ This document collects the mathematical definitions used throughout the EN3100 d
 - **Timestamp alignment:** All auxiliary feeds (sentiment/order book) are left-joined to price bars and forward-filled to daily frequency.
 
 ## Returns and targets
-- **Simple return:** $r_t = \dfrac{P_t^{\text{close}} - P_{t-1}^{\text{close}}}{P_{t-1}^{\text{close}}}$
+- **Simple return** (`return_1d`): $r_t = \dfrac{P_t^{\text{close}} - P_{t-1}^{\text{close}}}{P_{t-1}^{\text{close}}}$
 - **Log return:** $\log r_t = \log P_t^{\text{close}} - \log P_{t-1}^{\text{close}}$
 - **Next-day return (target):** $r_{t+1}^{\text{target}} = \dfrac{P_{t+1}^{\text{close}} - P_t^{\text{close}}}{P_t^{\text{close}}}$
 - **Next-day direction:** $\text{dir}_{t+1} = \mathbb{1}(r_{t+1}^{\text{target}} > 0)$
@@ -25,30 +25,30 @@ This document collects the mathematical definitions used throughout the EN3100 d
 ## Technical indicators
 - **Exponential Moving Average (EMA):** $\text{EMA}_\lambda(t) = \alpha P_t^{\text{close}} + (1-\alpha)\,\text{EMA}_\lambda(t-1)$ where $\alpha = \dfrac{2}{\lambda + 1}$
 - **Simple Moving Average (MA):** $\text{MA}_N(t) = \dfrac{1}{N} \sum_{i=0}^{N-1} P_{t-i}^{\text{close}}$
-- **MACD:** $\text{MACD}_t = \text{EMA}_{12}(t) - \text{EMA}_{26}(t)$; signal line $= \text{EMA}_{9}(\text{MACD}_t)$
-- **RSI (Wilder):** $\text{RS}_t = \dfrac{\text{EMA}_{14}(\text{gains})}{\text{EMA}_{14}(\text{losses})}$, $\text{RSI}_t = 100 - \dfrac{100}{1 + \text{RS}_t}$
-- **Rolling volatility:** $\sigma_t = \sqrt{\dfrac{1}{N-1} \sum_{i=0}^{N-1} (r_{t-i} - \bar{r})^2}$, typically $N=21$
-- **Rolling volume z-score:** $z_t = \dfrac{V_t - \mu_{V, N}}{\sigma_{V, N}}$ with window $N=63$
-- **Time-Series Momentum (TSMOM):** $\text{TSMOM}_t = \dfrac{P_t^{\text{close}}}{P_{t-L}^{\text{close}}} - 1$, with $L=252$
+- **MACD** (`macd_line`, `macd_signal`, `macd_hist`): $\text{MACD}_t = \text{EMA}_{12}(t) - \text{EMA}_{26}(t)$; signal line $= \text{EMA}_{9}(\text{MACD}_t)$
+- **RSI** (`rsi_14`): $\text{RS}_t = \dfrac{\text{EMA}_{14}(\text{gains})}{\text{EMA}_{14}(\text{losses})}$, $\text{RSI}_t = 100 - \dfrac{100}{1 + \text{RS}_t}$
+- **Rolling volatility** (`volatility_21`): $\sigma_t = \sqrt{\dfrac{1}{N-1} \sum_{i=0}^{N-1} (r_{t-i} - \bar{r})^2}$ with $N=21$
+- **Rolling volume z-score** (`volume_zscore_63`): $z_t = \dfrac{V_t - \mu_{V, N}}{\sigma_{V, N}}$ with window $N=63$
+- **Time-Series Momentum** (`tsmom_252`): $\text{TSMOM}_t = \dfrac{P_t^{\text{close}}}{P_{t-L}^{\text{close}}} - 1$ with lookback $L=252$
 - **VWAP/TWAP placeholders:** $\text{VWAP} = \dfrac{\sum p_i v_i}{\sum v_i}$, $\text{TWAP} = \dfrac{1}{n}\sum_{i=1}^n p_i$ (implemented as TODO for intraday data)
 
 ## Market structure and pattern features
-- **Swing high/low flags:** $\text{swing\_high}_t = \mathbb{1}(P_t^{\text{high}} = \max(P_{t-w:t+w}^{\text{high}}))$, similarly for swing lows.
-- **MA crossover flags:**
+- **Swing high/low** (`swing_high`, `swing_low`): $\text{swing\_high}_t = \mathbb{1}(P_t^{\text{high}} = \max(P_{t-w:t+w}^{\text{high}}))$, similarly for swing lows. Also stored as binary flags (`swing_high_flag`, `swing_low_flag`).
+- **MA crossover flags** (`ma_bullish_crossover`, `ma_bearish_crossover`):
   - Bullish: $\mathbb{1}(\text{MA}_{10}(P^{\text{close}})_t > \text{MA}_{50}(P^{\text{close}})_t \land \text{MA}_{10}(P^{\text{close}})_{t-1} \le \text{MA}_{50}(P^{\text{close}})_{t-1})$
   - Bearish: analogous with the inequality reversed.
-- **Head-and-shoulders detection:** Identifies triplets of consecutive peaks where the middle peak (head) exceeds both shoulders by at least a `tolerance` threshold (default 2%). The pattern is marked at the right shoulder.
-- **Double-top/bottom detection:** Identifies pairs of consecutive peaks (or troughs) at similar heights (within `tolerance`), with a significant trough (or peak) between them.
+- **Head-and-shoulders detection** (`pattern_head_shoulders`): Identifies triplets of consecutive peaks where the middle peak (head) exceeds both shoulders by at least a `tolerance` threshold (default 2%). The pattern is marked at the right shoulder.
+- **Double-top/bottom detection** (`pattern_double_top`, `pattern_double_bottom`): Identifies pairs of consecutive peaks (or troughs) at similar heights (within `tolerance`), with a significant trough (or peak) between them.
 - **Liquidity grab:** Detects volume spikes (above `volume_threshold` × rolling average) combined with price reversal patterns (close position > 0.7 for bullish or < 0.3 for bearish) and significant price movement.
 - **Fair Value Gap (FVG):** Bullish when $P_{t-2}^{\text{high}} < P_t^{\text{low}}$; bearish when $P_{t-2}^{\text{low}} > P_t^{\text{high}}$. Gap must exceed `min_gap_percent` (default 0.1%) and remain unfilled for `fill_lookforward` bars.
-- **Asia session breakout:** For daily data, uses previous day's range as proxy. Bullish breakout when $P_t^{\text{close}} > P_{t-1}^{\text{high}}$; bearish when $P_t^{\text{close}} < P_{t-1}^{\text{low}}$.
+- **Asia session breakout** (`ict_smt_asia`): For daily data, uses previous day's range as proxy. Bullish breakout when $P_t^{\text{close}} > P_{t-1}^{\text{high}}$; bearish when $P_t^{\text{close}} < P_{t-1}^{\text{low}}$.
 
 ## Order flow and liquidity features
-- **Order Flow Imbalance (OFI):** $\text{OFI}_t = \dfrac{\text{bidVol}_t - \text{askVol}_t}{\text{bidVol}_t + \text{askVol}_t + \varepsilon}$
-- **Depth ratio:** $\text{Depth}_t = \dfrac{\text{bidVol}_t}{\text{bidVol}_t + \text{askVol}_t + \varepsilon}$
-- **Bid-ask spread proxy:** $\text{Spread}_t = \dfrac{\text{ask}_t - \text{bid}_t}{P_t^{\text{close}} + \varepsilon}$
-- **Realised volatility buckets:** label as $\{\text{low}, \text{medium}, \text{high}\}$ by quantiles of $\sigma_t$; one-hot encoded for modelling.
-- **Index drawdown (risk-off):** $\text{DD}_t = \dfrac{\max_{\tau \le t} P_\tau^{\text{index}} - P_t^{\text{index}}}{\max_{\tau \le t} P_\tau^{\text{index}}}$
+- **Order Flow Imbalance** (`ofi`): $\text{OFI}_t = \dfrac{\text{bidVol}_t - \text{askVol}_t}{\text{bidVol}_t + \text{askVol}_t + \varepsilon}$
+- **Depth ratio** (`depth_ratio`): $\text{Depth}_t = \dfrac{\text{bidVol}_t}{\text{bidVol}_t + \text{askVol}_t + \varepsilon}$
+- **Bid-ask spread proxy** (`bid_ask_spread`): $\text{Spread}_t = \dfrac{\text{ask}_t - \text{bid}_t}{P_t^{\text{close}} + \varepsilon}$
+- **Realised volatility buckets** (`realised_vol_bucket` → one-hot encoded as `regime_low`, `regime_medium`, `regime_high`): label as $\{\text{low}, \text{medium}, \text{high}\}$ by quantiles of $\sigma_t$; one-hot encoded for modelling.
+- **Index drawdown** (`drawdown`): $\text{DD}_t = \dfrac{\max_{\tau \le t} P_\tau^{\text{index}} - P_t^{\text{index}}}{\max_{\tau \le t} P_\tau^{\text{index}}}$
 
 ## Feature scaling for models
 - **StandardScaler (per split):** $x^{\text{scaled}} = \dfrac{x - \mu_{\text{train}}}{\sigma_{\text{train}}}$ applied after dropping non-numeric columns.
