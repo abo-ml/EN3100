@@ -185,10 +185,13 @@ The `engineer_features.py` module computes the following features per ticker:
 | `swing_high_flag`, `swing_low_flag` | Local high/low flags | window=3 |
 | `pattern_head_shoulders`, `pattern_double_top`, `pattern_double_bottom` | Chart pattern flags | Rule-based detection using peak/trough analysis (window=5, tolerance=0.02) |
 | `ict_smt_asia` | ICT/SMT Asia session feature | Placeholder |
+| `liquidity_grab` | Liquidity grab detection | Future work (volume_threshold=2.0, reversal_threshold=0.005, lookback=5) |
+| `fvg` | Fair value gap detection | Future work (min_gap_percent=0.001, fill_lookforward=5) |
+| `asia_breakout` | Asia session range breakout | Future work (asia_start=0, asia_end=6, london_start=8, london_end=12) |
 | `realised_vol_bucket` | Volatility regime labels | Quantile buckets: low/medium/high at 33rd/66th percentiles |
 | `drawdown` | Rolling drawdown from cumulative max | — |
 
-Pattern recognition functions (`detect_head_and_shoulders`, `detect_double_top`) are implemented with rule-based algorithms that identify local maxima/minima and validate pattern constraints. Additional pattern detection functions (`flag_liquidity_grab`, `detect_fvg`, `asia_session_range_breakout`) are also available in `src/advanced/pattern_recognition.py`.
+Pattern recognition functions (`detect_head_and_shoulders`, `detect_double_top`) are implemented with rule-based algorithms that identify local maxima/minima and validate pattern constraints. Additional pattern detection functions (`flag_liquidity_grab`, `detect_fvg`, `asia_session_range_breakout`) are available in `src/advanced/pattern_recognition.py` and integrated into the pipeline with graceful fallback (returns zeros if `NotImplementedError` is raised). These are marked as **future work** pending further validation and tuning.
 
 ### 5. Run model iterations
 Each iteration script performs walk-forward validation, trains the designated models, logs metrics to `reports/`, and saves diagnostic plots.
@@ -451,11 +454,13 @@ export BINANCE_API_SECRET="your-secret"      # Optional for public endpoints
 ### Pattern Recognition (`src/advanced/pattern_recognition.py`)
 The pattern recognition module provides rule-based detectors for common trading patterns:
 
-| Function | Description | Key Parameters |
-|----------|-------------|----------------|
-| `flag_liquidity_grab()` | Detects volume spikes with price reversals | `volume_threshold=2.0`, `reversal_threshold=0.005`, `lookback=5` |
-| `detect_fvg()` | Identifies fair value gaps between candles | `min_gap_percent=0.001`, `fill_lookforward=5` |
-| `asia_session_range_breakout()` | Marks breakouts from overnight range | `asia_start=0`, `asia_end=6`, `london_start=8`, `london_end=12` |
+| Function | Description | Key Parameters | Status |
+|----------|-------------|----------------|--------|
+| `flag_liquidity_grab()` | Detects volume spikes with price reversals | `volume_threshold=2.0`, `reversal_threshold=0.005`, `lookback=5` | Future work |
+| `detect_fvg()` | Identifies fair value gaps between candles | `min_gap_percent=0.001`, `fill_lookforward=5` | Future work |
+| `asia_session_range_breakout()` | Marks breakouts from overnight range | `asia_start=0`, `asia_end=6`, `london_start=8`, `london_end=12` | Future work |
+
+> **Note:** These functions are implemented but marked as **future work** pending further validation. They are integrated into the feature engineering pipeline with graceful fallback - if any function raises `NotImplementedError`, the pipeline returns zeros for that feature and continues without breaking.
 
 **Example usage:**
 ```python
