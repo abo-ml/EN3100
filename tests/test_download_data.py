@@ -347,3 +347,138 @@ def test_download_yfinance_timezone_aware_date(monkeypatch):
 
     assert result is not None
     assert result["date"].dt.tz is None  # Should be timezone naive
+
+
+def test_download_fred_returns_data_for_gspc(monkeypatch):
+    """Test that _download_fred returns data for ^GSPC using SP500 series."""
+    import types
+    
+    # Create a mock pdr module
+    def mock_datareader(series, source, start, end):
+        assert series == "SP500"
+        assert source == "fred"
+        return pd.DataFrame(
+            {"SP500": [4000.0, 4010.0, 4020.0]},
+            index=pd.to_datetime(["2024-01-02", "2024-01-03", "2024-01-04"]),
+        )
+
+    mock_pdr = types.SimpleNamespace(DataReader=mock_datareader)
+    monkeypatch.setattr(dd, "HAS_PANDAS_DATAREADER", True)
+    monkeypatch.setattr(dd, "pdr", mock_pdr)
+
+    result = dd._download_fred("^GSPC", DummyConfig())
+
+    assert result is not None
+    assert "date" in result.columns
+    assert "close" in result.columns
+    assert "adj_close" in result.columns
+    assert "ticker" in result.columns
+    assert result["ticker"].iloc[0] == "^GSPC"
+    assert result["close"].iloc[0] == 4000.0
+
+
+def test_download_fred_returns_data_for_xauusd(monkeypatch):
+    """Test that _download_fred returns data for XAUUSD=X using GOLDAMGBD228NLBM series."""
+    import types
+    
+    def mock_datareader(series, source, start, end):
+        assert series == "GOLDAMGBD228NLBM"
+        assert source == "fred"
+        return pd.DataFrame(
+            {"GOLDAMGBD228NLBM": [1900.0, 1905.0, 1910.0]},
+            index=pd.to_datetime(["2024-01-02", "2024-01-03", "2024-01-04"]),
+        )
+
+    mock_pdr = types.SimpleNamespace(DataReader=mock_datareader)
+    monkeypatch.setattr(dd, "HAS_PANDAS_DATAREADER", True)
+    monkeypatch.setattr(dd, "pdr", mock_pdr)
+
+    result = dd._download_fred("XAUUSD=X", DummyConfig())
+
+    assert result is not None
+    assert result["close"].iloc[0] == 1900.0
+    assert result["ticker"].iloc[0] == "XAUUSD=X"
+
+
+def test_download_fred_returns_none_for_unknown_ticker(monkeypatch):
+    """Test that _download_fred returns None for tickers not in FRED_TICKER_MAP."""
+    monkeypatch.setattr(dd, "HAS_PANDAS_DATAREADER", True)
+
+    result = dd._download_fred("AAPL", DummyConfig())
+    assert result is None
+
+
+def test_download_fred_returns_none_when_no_pandas_datareader(monkeypatch):
+    """Test that _download_fred returns None when pandas_datareader is not installed."""
+    monkeypatch.setattr(dd, "HAS_PANDAS_DATAREADER", False)
+
+    result = dd._download_fred("^GSPC", DummyConfig())
+    assert result is None
+
+
+def test_download_fred_handles_empty_data(monkeypatch):
+    """Test that _download_fred returns None for empty data."""
+    import types
+    
+    def mock_datareader(series, source, start, end):
+        return pd.DataFrame()
+
+    mock_pdr = types.SimpleNamespace(DataReader=mock_datareader)
+    monkeypatch.setattr(dd, "HAS_PANDAS_DATAREADER", True)
+    monkeypatch.setattr(dd, "pdr", mock_pdr)
+
+    result = dd._download_fred("^GSPC", DummyConfig())
+    assert result is None
+
+
+def test_fred_ticker_map_contains_expected_tickers():
+    """Test that FRED_TICKER_MAP contains expected tickers."""
+    assert "^GSPC" in dd.FRED_TICKER_MAP
+    assert "XAUUSD=X" in dd.FRED_TICKER_MAP
+    assert dd.FRED_TICKER_MAP["^GSPC"] == "SP500"
+    assert dd.FRED_TICKER_MAP["XAUUSD=X"] == "GOLDAMGBD228NLBM"
+
+
+def test_download_single_ticker_uses_fred_as_fallback(monkeypatch):
+    """Test that download_single_ticker tries FRED as final fallback for ^GSPC."""
+    fred_called = []
+
+    def mock_av(*args, **kwargs):
+        raise RuntimeError("AV unavailable")
+
+    def mock_yf(*args, **kwargs):
+        return None  # Simulate yfinance failure
+
+    def mock_stooq(*args, **kwargs):
+        return None  # Simulate Stooq failure
+
+    def mock_fred(ticker, config):
+        fred_called.append(ticker)
+        return pd.DataFrame({
+            "date": pd.to_datetime(["2024-01-02", "2024-01-03"]),
+            "open": [None, None],
+            "high": [None, None],
+            "low": [None, None],
+            "close": [4000.0, 4010.0],
+            "adj_close": [4000.0, 4010.0],
+            "volume": [None, None],
+            "ticker": ["^GSPC", "^GSPC"],
+        })
+
+    monkeypatch.setattr(dd, "_download_alpha_vantage", mock_av)
+    monkeypatch.setattr(dd, "_download_yfinance", mock_yf)
+    monkeypatch.setattr(dd, "_download_stooq", mock_stooq)
+    monkeypatch.setattr(dd, "_download_fred", mock_fred)
+    monkeypatch.setattr(dd, "_basic_clean_ohlcv", lambda df: df)
+    monkeypatch.setattr(dd, "HAS_PANDAS_DATAREADER", True)
+
+    class ConfigWithProviders:
+        providers = None
+        start = "2024-01-01"
+        end = "2024-01-31"
+        interval = "1d"
+        api_key = None
+
+    df = dd.download_single_ticker("^GSPC", ConfigWithProviders())
+    assert not df.empty
+    assert "^GSPC" in fred_called
