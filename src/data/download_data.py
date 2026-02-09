@@ -346,17 +346,8 @@ def _download_yfinance(ticker: str, config: DownloadConfig) -> Optional[pd.DataF
     # Step 5: Ensure date is timezone naive
     data["date"] = _ensure_timezone_naive(data["date"])
 
-    # Step 6: Standardize OHLCV columns to lowercase
-    # First, create a case-insensitive mapping for all columns
-    column_mapping = {}
-    for col in data.columns:
-        if isinstance(col, str):
-            col_lower = col.lower()
-            # Map various column names to standard lowercase
-            if col_lower in ["open", "high", "low", "volume"]:
-                column_mapping[col] = col_lower
-    
-    data.rename(columns=column_mapping, inplace=True)
+    # Step 6: Standardize OHLCV columns to lowercase using helper function
+    data = _convert_ohlcv_columns(data)
     
     # Step 7: Handle Close and Adj Close with priority logic
     # Priority: Adj Close exists -> use for both close and adj_close
