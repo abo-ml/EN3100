@@ -83,6 +83,8 @@ This section summarizes the APIs used by the project and which are required vs o
 > **Note:** If both `ALPHAVANTAGE_API_KEY` and `ALPHA_VANTAGE_API_KEY` are set, `ALPHAVANTAGE_API_KEY` takes precedence.
 > 
 > **Note:** Known premium-only tickers (e.g., AAPL, MSFT, GOOGL, AMZN, META, TSLA, NVDA) automatically skip Alpha Vantage and use yfinance/Stooq instead to avoid premium endpoint errors.
+>
+> **Note:** For tickers like ^GSPC (S&P 500) and XAUUSD=X (Gold), FRED is used as a final fallback when Stooq and yfinance fail. FRED provides close-only price data (no OHLCV).
 
 ### Optional APIs (for enhanced functionality)
 
@@ -93,15 +95,44 @@ This section summarizes the APIs used by the project and which are required vs o
 | **Alpaca** | Real-time order book data | Order flow features, live trading | `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY` |
 | **Binance** | Crypto order book data | Crypto order flow features | `BINANCE_API_KEY`, `BINANCE_API_SECRET` |
 | **Stooq** (via pandas_datareader) | Free OHLCV data fallback | Fallback when Alpha Vantage and yfinance fail | No API key required |
+| **FRED** (via pandas_datareader) | Federal Reserve data fallback | Final fallback for ^GSPC and XAUUSD=X (close-only data) | No API key required |
 
 > **Quick Reference – Environment Variables:**
 > ```bash
 > export ALPHAVANTAGE_API_KEY="your-alpha-vantage-key"
 > export FRED_API_KEY="your-fred-key"            # optional, for macro data
+> export NEWSAPI_KEY="your-newsapi-key"          # optional, for news sentiment
 > export APCA_API_KEY_ID="your-alpaca-key"       # optional, for order book
 > export APCA_API_SECRET_KEY="your-alpaca-secret"
 > export APCA_API_BASE_URL="https://paper-api.alpaca.markets"
 > ```
+
+### Missing API Key Behavior
+
+The codebase validates environment variables and provides clear warnings when API keys are missing. Instead of causing silent failures, missing keys trigger informative log messages:
+
+| API Key | Behavior When Missing |
+|---------|----------------------|
+| `ALPHAVANTAGE_API_KEY` | Logs warning and skips Alpha Vantage, falls back to yfinance/Stooq |
+| `FRED_API_KEY` | Logs warning, FRED macro data download may fail |
+| `NEWSAPI_KEY` | Logs warning, News API features unavailable (future enhancement) |
+| `APCA_API_KEY_ID` / `APCA_API_SECRET_KEY` | Logs warning, returns empty order book snapshot instead of failing |
+
+**Example warning message:**
+```
+WARNING - ALPHAVANTAGE_API_KEY not set. Please set this environment variable to use the associated API. See README.md for configuration instructions.
+```
+
+Use the `get_api_key()` helper from `src.utils` to check API keys with consistent warning behavior:
+
+```python
+from src.utils import get_api_key
+
+api_key = get_api_key("ALPHAVANTAGE_API_KEY")
+if not api_key:
+    # Handle missing key gracefully (skip, use fallback, etc.)
+    return None
+```
 
 ### Minimum Viable Configuration
 
@@ -119,7 +150,8 @@ This is ideal for testing and development. For production/dissertation work, Alp
 The data download module uses the following provider order by default:
 1. **Alpha Vantage** (primary, requires API key) - skipped for premium-only tickers
 2. **yfinance** (fallback, no API key required)
-3. **Stooq** (final fallback, requires `pandas_datareader>=0.10`)
+3. **Stooq** (fallback, requires `pandas_datareader>=0.10`)
+4. **FRED** (final fallback for ^GSPC and XAUUSD=X only, requires `pandas_datareader>=0.10`, close-only data)
 
 ### What Works Without APIs
 
@@ -194,13 +226,13 @@ The `engineer_features.py` module computes the following features per ticker:
 | `swing_high_flag`, `swing_low_flag` | Local high/low flags | window=3 |
 | `pattern_head_shoulders`, `pattern_double_top`, `pattern_double_bottom` | Chart pattern flags | Rule-based detection using peak/trough analysis (window=5, tolerance=0.02) |
 | `ict_smt_asia` | ICT/SMT Asia session feature | Placeholder |
-| `liquidity_grab` | Liquidity grab detection | Future work (volume_threshold=2.0, reversal_threshold=0.005, lookback=5) |
-| `fvg` | Fair value gap detection | Future work (min_gap_percent=0.001, fill_lookforward=5) |
-| `asia_breakout` | Asia session range breakout | Future work (asia_start=0, asia_end=6, london_start=8, london_end=12) |
+| `liquidity_grab` | Flags volume spikes with wick-based reversals (potential stop-runs) | volume_threshold=2.0, reversal_threshold=0.005, lookback=5 |
+| `fvg` | Identifies fair-value gaps between non-overlapping bars; returns 1 (gap up) or -1 (gap down) | min_gap_percent=0.001, fill_lookforward=5 |
+| `asia_breakout` | Flags breakouts from the overnight range during the London session; 1 for bullish, -1 for bearish | asia_start=0, asia_end=6, london_start=8, london_end=12 |
 | `realised_vol_bucket` | Volatility regime labels | Quantile buckets: low/medium/high at 33rd/66th percentiles |
 | `drawdown` | Rolling drawdown from cumulative max | — |
 
-Pattern recognition functions (`detect_head_and_shoulders`, `detect_double_top`) are implemented with rule-based algorithms that identify local maxima/minima and validate pattern constraints. Additional pattern detection functions (`flag_liquidity_grab`, `detect_fvg`, `asia_session_range_breakout`) are available in `src/advanced/pattern_recognition.py` and integrated into the pipeline with graceful fallback (returns zeros if `NotImplementedError` is raised). These are marked as **future work** pending further validation and tuning.
+Pattern recognition functions (`detect_head_and_shoulders`, `detect_double_top`) are implemented with rule-based algorithms that identify local maxima/minima and validate pattern constraints. Additional pattern detection functions (`flag_liquidity_grab`, `detect_fvg`, `asia_session_range_breakout`) are fully implemented in `src/advanced/pattern_recognition.py` and integrated into the pipeline with graceful fallback (returns zeros if data is incomplete or missing required columns). These features operate on standard OHLCV data—no additional API access is required.
 
 ### 5. Run model iterations
 Each iteration script performs walk-forward validation, trains the designated models, logs metrics to `reports/`, and saves diagnostic plots.

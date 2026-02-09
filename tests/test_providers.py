@@ -125,7 +125,7 @@ def test_env_var_warning_when_api_key_empty(monkeypatch, caplog):
         result = dd._get_api_key(config, "alpha_vantage")
 
     assert result is None
-    assert any("Alpha Vantage API key is empty" in rec.message for rec in caplog.records)
+    assert any("Alpha Vantage API key not configured" in rec.message for rec in caplog.records)
 
 
 def test_env_var_fallback_to_alternative_key(monkeypatch):
