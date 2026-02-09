@@ -50,8 +50,10 @@ def run_align(tickers: Optional[Iterable[str]] = None, ticker_file: Optional[Pat
 
 
 def run_engineer_features(output: Optional[Path] = None) -> Path:
-    _ = output  # reserved for future extension; current engineer_features.main takes no args.
-    return engineer_features.main()
+    args = []
+    if output:
+        args.extend(["--output", str(output)])
+    return engineer_features.main(args if args else None)
 
 
 def run_download(tickers: List[str], start: str, end: str, provider: str) -> None:
