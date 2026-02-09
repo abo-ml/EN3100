@@ -1,3 +1,5 @@
+import logging
+
 import pandas as pd
 import src.data.download_data as dd
 
@@ -347,3 +349,216 @@ def test_download_yfinance_timezone_aware_date(monkeypatch):
 
     assert result is not None
     assert result["date"].dt.tz is None  # Should be timezone naive
+
+
+# === NEW TESTS FOR ISSUE #6: Add tests for new logic ===
+
+
+def test_download_yfinance_multilevel_columns_with_ticker_suffix(monkeypatch):
+    """Test that _download_yfinance handles multi-level columns like ('Close', 'TEST').
+    
+    This tests the scenario where yfinance returns a DataFrame with MultiIndex columns
+    where the first level is the column name (e.g., 'Close') and the second level is
+    the ticker symbol (e.g., 'TEST'). The function should correctly extract the data
+    and return a DataFrame with 'date', 'close', and 'adj_close' columns.
+    """
+    import yfinance as yf
+
+    def mock_download(*args, **kwargs):
+        # Create a DataFrame with MultiIndex columns: ('Column', 'Ticker')
+        arrays = [
+            ["Open", "High", "Low", "Close", "Adj Close", "Volume"],
+            ["TEST", "TEST", "TEST", "TEST", "TEST", "TEST"],
+        ]
+        tuples = list(zip(*arrays))
+        columns = pd.MultiIndex.from_tuples(tuples)
+        data = pd.DataFrame(
+            [[100.0, 105.0, 98.0, 102.5, 102.0, 10000],
+             [103.0, 108.0, 101.0, 106.5, 106.0, 12000]],
+            index=pd.to_datetime(["2024-01-02", "2024-01-03"]),
+            columns=columns,
+        )
+        data.index.name = "Date"
+        # Return with MultiIndex intact - function should handle flattening
+        return data
+
+    monkeypatch.setattr(yf, "download", mock_download)
+    result = dd._download_yfinance("TEST", DummyConfig())
+
+    # Verify the function returns a valid DataFrame with required columns
+    assert result is not None, "Function should return data for valid input"
+    assert "date" in result.columns, "Missing 'date' column"
+    assert "close" in result.columns, "Missing 'close' column"
+    assert "adj_close" in result.columns, "Missing 'adj_close' column"
+    
+    # Verify data integrity
+    assert len(result) == 2, "Should have 2 rows"
+    assert result["ticker"].iloc[0] == "TEST", "Ticker should be 'TEST'"
+
+
+def test_download_single_ticker_alpha_vantage_premium_error_fallback(monkeypatch):
+    """Test that download_single_ticker() falls back when Alpha Vantage throws a premium error.
+    
+    When Alpha Vantage returns an error (e.g., premium subscription required),
+    the function should catch the exception and fall back to yfinance or Stooq.
+    """
+    fallback_providers_called = []
+
+    def mock_av_premium_error(*args, **kwargs):
+        # Simulate Alpha Vantage premium subscription error
+        raise RuntimeError("API rate limit reached or premium subscription required")
+
+    def mock_yfinance(*args, **kwargs):
+        fallback_providers_called.append("yfinance")
+        return _df_with_date()
+
+    # Ensure we're testing a non-premium ticker so Alpha Vantage is actually tried
+    monkeypatch.setattr(dd, "_download_alpha_vantage", mock_av_premium_error)
+    monkeypatch.setattr(dd, "_download_yfinance", mock_yfinance)
+    monkeypatch.setattr(dd, "_basic_clean_ohlcv", lambda df: df)
+    
+    # Create config with providers list
+    config = DummyConfig()
+    config.providers = ["alpha_vantage", "yfinance"]
+    
+    # Use a non-premium ticker (not in PREMIUM_ONLY_TICKERS)
+    result = dd.download_single_ticker("XYZ", config)
+
+    assert not result.empty, "Should return data from fallback provider"
+    assert "yfinance" in fallback_providers_called, "yfinance should have been called as fallback"
+
+
+def test_download_single_ticker_yfinance_stooq_fail_uses_last_provider(monkeypatch, caplog):
+    """Test fallback chain when multiple providers fail for a specific ticker.
+    
+    Mock yfinance and earlier providers to fail, but the last provider (stooq) succeeds.
+    This confirms the fallback mechanism works correctly through the entire chain.
+    """
+    import logging
+    providers_called = []
+
+    def mock_av_fail(*args, **kwargs):
+        providers_called.append("alpha_vantage")
+        raise RuntimeError("Alpha Vantage unavailable")
+
+    def mock_yfinance_fail(*args, **kwargs):
+        providers_called.append("yfinance")
+        raise RuntimeError("yfinance unavailable for XAUUSD=X")
+
+    def mock_stooq_success(*args, **kwargs):
+        providers_called.append("stooq")
+        # Return valid data from Stooq
+        return pd.DataFrame({
+            "date": pd.to_datetime(["2024-01-02", "2024-01-03"]),
+            "open": [2050.0, 2055.0],
+            "high": [2060.0, 2065.0],
+            "low": [2045.0, 2050.0],
+            "close": [2055.0, 2060.0],
+            "adj_close": [2055.0, 2060.0],
+            "volume": [100, 120],
+            "ticker": ["XAUUSD=X", "XAUUSD=X"],
+        })
+
+    monkeypatch.setattr(dd, "_download_alpha_vantage", mock_av_fail)
+    monkeypatch.setattr(dd, "_download_yfinance", mock_yfinance_fail)
+    monkeypatch.setattr(dd, "_download_stooq", mock_stooq_success)
+    monkeypatch.setattr(dd, "_basic_clean_ohlcv", lambda df: df)
+    monkeypatch.setattr(dd, "HAS_PANDAS_DATAREADER", True)
+
+    config = DummyConfig()
+    config.providers = ["alpha_vantage", "yfinance", "stooq"]
+    
+    with caplog.at_level(logging.WARNING):
+        result = dd.download_single_ticker("XAUUSD=X", config)
+
+    assert not result.empty, "Should return data from stooq fallback"
+    assert "stooq" in providers_called, "Stooq should have been called"
+    # Verify providers were tried in order
+    assert providers_called == ["alpha_vantage", "yfinance", "stooq"]
+
+
+def test_missing_alphavantage_api_key_logs_warning_and_uses_fallback(monkeypatch, caplog):
+    """Test that missing ALPHAVANTAGE_API_KEY logs a warning and data is fetched via fallback.
+    
+    When ALPHAVANTAGE_API_KEY environment variable is not set, the function should:
+    1. Log a clear warning about the missing API key
+    2. Fall back to yfinance or Stooq to fetch data
+    3. Successfully return data from the fallback provider
+    """
+    import logging
+
+    # Ensure no Alpha Vantage API key is configured
+    monkeypatch.delenv("ALPHAVANTAGE_API_KEY", raising=False)
+    monkeypatch.delenv("ALPHA_VANTAGE_API_KEY", raising=False)
+
+    providers_called = []
+
+    def mock_yfinance_success(*args, **kwargs):
+        providers_called.append("yfinance")
+        return _df_with_date()
+
+    monkeypatch.setattr(dd, "_download_yfinance", mock_yfinance_success)
+    monkeypatch.setattr(dd, "_basic_clean_ohlcv", lambda df: df)
+
+    # Create a config without API key
+    config = DummyConfig()
+    config.api_key = None
+    config.providers = ["alpha_vantage", "yfinance"]
+
+    with caplog.at_level(logging.WARNING):
+        # Use a non-premium ticker to test Alpha Vantage API key check
+        result = dd.download_single_ticker("XYZ", config)
+
+    # Verify a warning was logged about missing API key
+    warning_found = any(
+        "Alpha Vantage API key" in record.message or "API key not configured" in record.message
+        for record in caplog.records
+    )
+    assert warning_found, "Should log a warning about missing Alpha Vantage API key"
+    
+    # Verify data was fetched via fallback provider
+    assert not result.empty, "Should return data from fallback provider"
+    assert "yfinance" in providers_called, "yfinance should have been used as fallback"
+
+
+def test_download_yfinance_generic_ticker_multiindex(monkeypatch):
+    """Test _download_yfinance with a generic ticker having MultiIndex columns.
+    
+    This ensures the function handles MultiIndex columns correctly regardless
+    of what ticker symbol is in the second level of the MultiIndex.
+    """
+    import yfinance as yf
+
+    def mock_download(*args, **kwargs):
+        # Create DataFrame with MultiIndex columns having a different ticker
+        arrays = [
+            ["Open", "High", "Low", "Close", "Adj Close", "Volume"],
+            ["GENERIC", "GENERIC", "GENERIC", "GENERIC", "GENERIC", "GENERIC"],
+        ]
+        tuples = list(zip(*arrays))
+        columns = pd.MultiIndex.from_tuples(tuples)
+        data = pd.DataFrame(
+            [[50.0, 52.0, 48.0, 51.0, 50.5, 5000]],
+            index=pd.to_datetime(["2024-01-02"]),
+            columns=columns,
+        )
+        data.index.name = "Date"
+        return data
+
+    monkeypatch.setattr(yf, "download", mock_download)
+    result = dd._download_yfinance("GENERIC", DummyConfig())
+
+    # Verify proper handling of MultiIndex and required output columns
+    assert result is not None
+    assert "date" in result.columns
+    assert "close" in result.columns
+    assert "adj_close" in result.columns
+    assert "open" in result.columns
+    assert "high" in result.columns
+    assert "low" in result.columns
+    assert "volume" in result.columns
+    assert "ticker" in result.columns
+    
+    # Verify Adj Close is used for close (as per priority logic)
+    assert result["close"].iloc[0] == 50.5  # Should use Adj Close value
+    assert result["adj_close"].iloc[0] == 50.5
