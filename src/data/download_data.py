@@ -44,6 +44,13 @@ LOGGER = logging.getLogger(__name__)
 # These will automatically skip Alpha Vantage and use yfinance/stooq instead.
 PREMIUM_ONLY_TICKERS = {"AAPL", "MSFT", "GOOGL", "GOOG", "AMZN", "META", "TSLA", "NVDA"}
 
+# Mapping of tickers to FRED series codes for fallback data.
+# FRED provides economic data including S&P 500 and gold prices.
+FRED_TICKER_MAP = {
+    "^GSPC": "SP500",          # S&P 500 Index
+    "XAUUSD=X": "GOLDAMGBD228NLBM",  # Gold Fixing Price (London)
+}
+
 
 @dataclass
 class DownloadConfig:
@@ -463,19 +470,83 @@ def _download_stooq(ticker: str, config: DownloadConfig) -> Optional[pd.DataFram
     return data
 
 
+def _download_fred(ticker: str, config: DownloadConfig) -> Optional[pd.DataFrame]:
+    """Download data via FRED (Federal Reserve Economic Data) as a fallback.
+
+    FRED provides free economic data for specific symbols like S&P 500 (SP500)
+    and gold prices (GOLDAMGBD228NLBM). This function is used as a final fallback
+    for tickers like ^GSPC and XAUUSD=X when other providers fail.
+
+    Note: FRED only provides close prices (no OHLCV), so open/high/low/volume
+    are set to NaN.
+
+    Returns None if ticker is not in FRED_TICKER_MAP or data is empty.
+    """
+    if not HAS_PANDAS_DATAREADER:
+        LOGGER.warning("pandas_datareader not installed, cannot use FRED provider")
+        return None
+
+    if ticker not in FRED_TICKER_MAP:
+        LOGGER.debug("Ticker %s not available via FRED", ticker)
+        return None
+
+    fred_series = FRED_TICKER_MAP[ticker]
+    LOGGER.info("Downloading %s via FRED (series: %s)", ticker, fred_series)
+
+    try:
+        data = pdr.DataReader(fred_series, "fred", start=config.start, end=config.end)
+    except Exception as e:
+        LOGGER.warning("FRED download failed for %s: %s", ticker, e)
+        return None
+
+    if data.empty:
+        LOGGER.warning("No data returned for %s from FRED", ticker)
+        return None
+
+    # FRED returns a DataFrame with DatetimeIndex and a single column named after the series
+    data = data.reset_index()
+    data.columns = ["date", "close"]
+
+    # Ensure date is timezone-naive
+    data["date"] = _ensure_timezone_naive(data["date"])
+
+    # FRED only provides close price - set other OHLCV columns to NaN/close values
+    data["open"] = np.nan
+    data["high"] = np.nan
+    data["low"] = np.nan
+    # FRED provides index-level data (SP500, gold prices) which doesn't have stock splits,
+    # so close and adj_close are equivalent.
+    data["adj_close"] = data["close"]
+    data["volume"] = np.nan
+
+    # Drop rows with NaN close (FRED may have missing data)
+    data = data.dropna(subset=["close"])
+
+    if data.empty:
+        LOGGER.warning("No valid data for %s from FRED after dropping NaN", ticker)
+        return None
+
+    data.sort_values("date", inplace=True)
+    data["ticker"] = ticker
+
+    return data[["date", "open", "high", "low", "close", "adj_close", "volume", "ticker"]]
+
+
 def download_single_ticker(ticker: str, config: DownloadConfig) -> pd.DataFrame:
     """Download OHLCV data for a single ticker with provider fallback.
 
-    Iterates over providers (default: alpha_vantage, yfinance, stooq) and returns
+    Iterates over providers (default: alpha_vantage, yfinance, stooq, fred) and returns
     the first successful download. Premium-only tickers (e.g., AAPL) automatically
-    skip Alpha Vantage to avoid premium endpoint errors. Stooq is used as a final
-    fallback if pandas_datareader is installed.
+    skip Alpha Vantage to avoid premium endpoint errors. Stooq and FRED are used as
+    final fallbacks if pandas_datareader is installed. FRED is particularly useful for
+    ^GSPC (S&P 500) and XAUUSD=X (gold) when other providers fail.
     """
     last_err: Optional[Exception] = None
-    # Default provider order: alpha_vantage, yfinance, stooq (if installed)
+    # Default provider order: alpha_vantage, yfinance, stooq, fred (if pandas_datareader installed)
     default_providers = ["alpha_vantage", "yfinance"]
     if HAS_PANDAS_DATAREADER:
         default_providers.append("stooq")
+        default_providers.append("fred")
     providers = getattr(config, "providers", None) or default_providers
 
     for provider in providers:
@@ -492,6 +563,8 @@ def download_single_ticker(ticker: str, config: DownloadConfig) -> pd.DataFrame:
                 df = _download_yfinance(ticker, config)
             elif provider == "stooq":
                 df = _download_stooq(ticker, config)
+            elif provider == "fred":
+                df = _download_fred(ticker, config)
             else:
                 raise ValueError(f"Unknown provider: {provider}")
             if df is None or df.empty:

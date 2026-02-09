@@ -83,6 +83,8 @@ This section summarizes the APIs used by the project and which are required vs o
 > **Note:** If both `ALPHAVANTAGE_API_KEY` and `ALPHA_VANTAGE_API_KEY` are set, `ALPHAVANTAGE_API_KEY` takes precedence.
 > 
 > **Note:** Known premium-only tickers (e.g., AAPL, MSFT, GOOGL, AMZN, META, TSLA, NVDA) automatically skip Alpha Vantage and use yfinance/Stooq instead to avoid premium endpoint errors.
+>
+> **Note:** For tickers like ^GSPC (S&P 500) and XAUUSD=X (Gold), FRED is used as a final fallback when Stooq and yfinance fail. FRED provides close-only price data (no OHLCV).
 
 ### Optional APIs (for enhanced functionality)
 
@@ -93,6 +95,7 @@ This section summarizes the APIs used by the project and which are required vs o
 | **Alpaca** | Real-time order book data | Order flow features, live trading | `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY` |
 | **Binance** | Crypto order book data | Crypto order flow features | `BINANCE_API_KEY`, `BINANCE_API_SECRET` |
 | **Stooq** (via pandas_datareader) | Free OHLCV data fallback | Fallback when Alpha Vantage and yfinance fail | No API key required |
+| **FRED** (via pandas_datareader) | Federal Reserve data fallback | Final fallback for ^GSPC and XAUUSD=X (close-only data) | No API key required |
 
 > **Quick Reference – Environment Variables:**
 > ```bash
@@ -119,7 +122,8 @@ This is ideal for testing and development. For production/dissertation work, Alp
 The data download module uses the following provider order by default:
 1. **Alpha Vantage** (primary, requires API key) - skipped for premium-only tickers
 2. **yfinance** (fallback, no API key required)
-3. **Stooq** (final fallback, requires `pandas_datareader>=0.10`)
+3. **Stooq** (fallback, requires `pandas_datareader>=0.10`)
+4. **FRED** (final fallback for ^GSPC and XAUUSD=X only, requires `pandas_datareader>=0.10`, close-only data)
 
 ### What Works Without APIs
 
