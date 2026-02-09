@@ -3,6 +3,7 @@
 This module tests the sentiment analysis and macro factor loading functionality.
 """
 import os
+from importlib import reload
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -66,14 +67,13 @@ class TestSentimentAnalysis:
     def test_vader_analyzer_ci_mode_no_download(self):
         """Test that VADER analyzer does not attempt download in CI mode."""
         import sys
-        
-        # Clear cached imports to ensure fresh load
-        if 'src.advanced.sentiment' in sys.modules:
-            del sys.modules['src.advanced.sentiment']
+        import src.advanced.sentiment
         
         with patch.dict(os.environ, {"CI": "true"}):
             with patch("nltk.data.find", side_effect=LookupError("Resource not found")):
                 with patch("nltk.download") as mock_download:
+                    # Reload module to pick up environment changes
+                    reload(src.advanced.sentiment)
                     from src.advanced.sentiment import compute_sentiment_score
                     
                     # Should fall back to TextBlob without attempting download
@@ -84,20 +84,22 @@ class TestSentimentAnalysis:
                     # Should still return a valid score using TextBlob
                     assert isinstance(score, float)
                     assert -1 <= score <= 1
+        
+        # Reload module to restore normal state
+        reload(src.advanced.sentiment)
 
     def test_vader_analyzer_handles_missing_lexicon(self):
         """Test that compute_sentiment_score handles missing VADER lexicon gracefully."""
         import sys
-        
-        # Clear cached imports
-        if 'src.advanced.sentiment' in sys.modules:
-            del sys.modules['src.advanced.sentiment']
+        import src.advanced.sentiment
         
         with patch.dict(os.environ, {"CI": "true"}):
             # Mock SentimentIntensityAnalyzer to raise LookupError
             with patch("nltk.data.find"):
                 with patch("nltk.sentiment.vader.SentimentIntensityAnalyzer", 
                           side_effect=LookupError("Lexicon not found")):
+                    # Reload module to pick up environment changes
+                    reload(src.advanced.sentiment)
                     from src.advanced.sentiment import compute_sentiment_score
                     
                     # Should handle the exception and fall back to TextBlob
@@ -105,6 +107,9 @@ class TestSentimentAnalysis:
                     
                     assert isinstance(score, float)
                     assert -1 <= score <= 1
+        
+        # Reload module to restore normal state
+        reload(src.advanced.sentiment)
 
     def test_sentiment_to_feature_merges_correctly(self):
         """Test sentiment_to_feature merges data correctly."""
