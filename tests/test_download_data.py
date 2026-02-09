@@ -201,7 +201,7 @@ def test_download_yfinance_multilevel_columns(monkeypatch):
 
 
 def test_download_yfinance_true_multiindex_columns(monkeypatch):
-    """Test that _download_yfinance handles actual MultiIndex columns without flattening."""
+    """Test that _download_yfinance correctly flattens MultiIndex columns."""
     import yfinance as yf
 
     def mock_download(*args, **kwargs):

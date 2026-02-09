@@ -315,8 +315,8 @@ def _download_yfinance(ticker: str, config: DownloadConfig) -> Optional[pd.DataF
             new_cols = []
             for col in data.columns:
                 if isinstance(col, tuple):
-                    # Take first element of tuple
-                    new_cols.append(col[0] if col[0] else str(col))
+                    # Take first element of tuple, handle None case
+                    new_cols.append(col[0] if col[0] is not None else str(col))
                 else:
                     new_cols.append(col)
             data.columns = new_cols
@@ -370,7 +370,7 @@ def _download_yfinance(ticker: str, config: DownloadConfig) -> Optional[pd.DataF
     for col in data.columns:
         if isinstance(col, str):
             col_lower = col.lower()
-            if col_lower == "close" and "adj" not in col_lower:
+            if col_lower == "close":
                 close_col = col
             elif col_lower == "adj close" or col_lower == "adj_close" or col_lower == "adjclose":
                 adj_close_col = col
