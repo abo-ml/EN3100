@@ -81,6 +81,8 @@ This section summarizes the APIs used by the project and which are required vs o
 | **Alpha Vantage** | Daily OHLCV data for equities and FX | Core data download (unless using yfinance only) | `ALPHAVANTAGE_API_KEY` (preferred) or `ALPHA_VANTAGE_API_KEY` |
 
 > **Note:** If both `ALPHAVANTAGE_API_KEY` and `ALPHA_VANTAGE_API_KEY` are set, `ALPHAVANTAGE_API_KEY` takes precedence.
+> 
+> **Note:** Known premium-only tickers (e.g., AAPL, MSFT, GOOGL, AMZN, META, TSLA, NVDA) automatically skip Alpha Vantage and use yfinance/Stooq instead to avoid premium endpoint errors.
 
 ### Optional APIs (for enhanced functionality)
 
@@ -90,6 +92,7 @@ This section summarizes the APIs used by the project and which are required vs o
 | **FRED** | Federal Reserve economic data | Macro factor features | `FRED_API_KEY` |
 | **Alpaca** | Real-time order book data | Order flow features, live trading | `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY` |
 | **Binance** | Crypto order book data | Crypto order flow features | `BINANCE_API_KEY`, `BINANCE_API_SECRET` |
+| **Stooq** (via pandas_datareader) | Free OHLCV data fallback | Fallback when Alpha Vantage and yfinance fail | No API key required |
 
 ### Minimum Viable Configuration
 
@@ -101,6 +104,13 @@ python -m src.data.download_data \
     --provider yfinance
 ```
 This is ideal for testing and development. For production/dissertation work, Alpha Vantage provides more reliable data.
+
+### Provider Fallback Order
+
+The data download module uses the following provider order by default:
+1. **Alpha Vantage** (primary, requires API key) - skipped for premium-only tickers
+2. **yfinance** (fallback, no API key required)
+3. **Stooq** (final fallback, requires `pandas_datareader>=0.10`)
 
 ### What Works Without APIs
 
@@ -173,12 +183,12 @@ The `engineer_features.py` module computes the following features per ticker:
 | `ofi`, `depth_ratio`, `bid_ask_spread` | Microstructure features | Placeholder (zeros until order-book data integrated) |
 | `ma_bullish_crossover`, `ma_bearish_crossover` | Moving average crossovers | fast=10, slow=50 |
 | `swing_high_flag`, `swing_low_flag` | Local high/low flags | window=3 |
-| `pattern_head_shoulders`, `pattern_double_top`, `pattern_double_bottom` | Chart pattern flags | Stub (zeros; awaiting rule-based or ML detection) |
+| `pattern_head_shoulders`, `pattern_double_top`, `pattern_double_bottom` | Chart pattern flags | Rule-based detection using peak/trough analysis (window=5, tolerance=0.02) |
 | `ict_smt_asia` | ICT/SMT Asia session feature | Placeholder |
 | `realised_vol_bucket` | Volatility regime labels | Quantile buckets: low/medium/high at 33rd/66th percentiles |
 | `drawdown` | Rolling drawdown from cumulative max | — |
 
-Pattern recognition placeholders (`detect_head_and_shoulders`, `detect_double_top`) raise `NotImplementedError` to prevent accidental use before implementation. Usable patterns (MA crossovers, swing flags) are computed directly.
+Pattern recognition functions (`detect_head_and_shoulders`, `detect_double_top`) are implemented with rule-based algorithms that identify local maxima/minima and validate pattern constraints. Additional pattern detection functions (`flag_liquidity_grab`, `detect_fvg`, `asia_session_range_breakout`) are also available in `src/advanced/pattern_recognition.py`.
 
 ### 5. Run model iterations
 Each iteration script performs walk-forward validation, trains the designated models, logs metrics to `reports/`, and saves diagnostic plots.
@@ -207,14 +217,27 @@ drive.mount("/content/drive")
 # 2. Unzip or clone the repository into /content
 !unzip -o "/content/EN3100.zip" -d "/content"  # adjust the filename as needed
 
-# 3. Change into the project directory
-%cd "/content/EN3100"
+# 3. Change into the project directory (with robust detection)
+import os
+# Detect the correct project directory after unzipping
+possible_dirs = ['EN3100', 'EN3100-main', 'EN3100-master']
+project_dir = None
+for dirname in possible_dirs:
+    path = f'/content/{dirname}'
+    if os.path.isdir(path):
+        project_dir = path
+        break
+if project_dir is None:
+    print("ERROR: Could not find EN3100 project directory.")
+    print("Contents of /content:", os.listdir('/content'))
+    raise FileNotFoundError("EN3100 project directory not found. Check the extracted folder name.")
+os.chdir(project_dir)
+print(f"Changed to: {project_dir}")
 
 # 4. Install dependencies
 !pip install -r requirements.txt -q
 
 # 5. Set credentials for data providers
-import os
 os.environ["ALPHAVANTAGE_API_KEY"] = "<YOUR_KEY>"  # or ALPHA_VANTAGE_API_KEY
 
 # 6. Run the same pipeline as documented above
