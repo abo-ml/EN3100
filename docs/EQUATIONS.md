@@ -30,7 +30,7 @@ This document collects the mathematical definitions used throughout the EN3100 d
 - **Rolling volatility** (`volatility_21`): $\sigma_t = \sqrt{\dfrac{1}{N-1} \sum_{i=0}^{N-1} (r_{t-i} - \bar{r})^2}$ with $N=21$
 - **Rolling volume z-score** (`volume_zscore_63`): $z_t = \dfrac{V_t - \mu_{V, N}}{\sigma_{V, N}}$ with window $N=63$
 - **Time-Series Momentum** (`tsmom_252`): $\text{TSMOM}_t = \dfrac{P_t^{\text{close}}}{P_{t-L}^{\text{close}}} - 1$ with lookback $L=252$
-- **VWAP/TWAP placeholders:** $\text{VWAP} = \dfrac{\sum p_i v_i}{\sum v_i}$, $\text{TWAP} = \dfrac{1}{n}\sum_{i=1}^n p_i$ (implemented as TODO for intraday data)
+- **VWAP/TWAP:** $\text{VWAP} = \dfrac{\sum p_i v_i}{\sum v_i}$, $\text{TWAP} = \dfrac{1}{n}\sum_{i=1}^n p_i$ (scheduled execution for intraday data)
 
 ## Market structure and pattern features
 - **Swing high/low** (`swing_high`, `swing_low`): $\text{swing\_high}_t = \mathbb{1}(P_t^{\text{high}} = \max(P_{t-w:t+w}^{\text{high}}))$, similarly for swing lows. Also stored as binary flags (`swing_high_flag`, `swing_low_flag`).
@@ -44,7 +44,7 @@ This document collects the mathematical definitions used throughout the EN3100 d
 - **Asia session breakout** (`asia_breakout`): For daily data, uses previous day's range as proxy. Bullish breakout when $P_t^{\text{close}} > P_{t-1}^{\text{high}}$; bearish when $P_t^{\text{close}} < P_{t-1}^{\text{low}}$. For intraday data, computes the overnight (Asia session) range and marks London session bars as 1 if close > overnight high or -1 if close < overnight low.
 
 ## Order flow and liquidity features
-- **Order Flow Imbalance** (`ofi`): $\text{OFI}_t = \dfrac{\text{bidVol}_t - \text{askVol}_t}{\text{bidVol}_t + \text{askVol}_t + \varepsilon}$
+- **Order Flow Imbalance** (`order_flow_imbalance` / `ofi`): $\text{OFI}_t = \dfrac{\text{bidVol}_t - \text{askVol}_t}{\text{bidVol}_t + \text{askVol}_t + \varepsilon}$
 - **Depth ratio** (`depth_ratio`): $\text{Depth}_t = \dfrac{\text{bidVol}_t}{\text{bidVol}_t + \text{askVol}_t + \varepsilon}$
 - **Bid-ask spread proxy** (`bid_ask_spread`): $\text{Spread}_t = \dfrac{\text{ask}_t - \text{bid}_t}{P_t^{\text{close}} + \varepsilon}$
 - **Realised volatility buckets** (`realised_vol_bucket` → one-hot encoded as `regime_low`, `regime_medium`, `regime_high`): label as $\{\text{low}, \text{medium}, \text{high}\}$ by quantiles of $\sigma_t$; one-hot encoded for modelling.
@@ -80,6 +80,6 @@ This document collects the mathematical definitions used throughout the EN3100 d
 - **Simulated equity:** $\tilde{E}_t = \prod_{i=1}^t (1 + \tilde{r}_i)$
 - **Simulated max drawdown:** same MDD formula applied to $\tilde{E}_t$.
 
-## Sentiment and macro placeholders
+## Sentiment and macro features
 - **Sentiment alignment:** daily sentiment score $s_t$ forward-filled to trading days; currently neutral $s_t=0$ unless CSV/API provided.
-- **Macro benchmarks:** placeholder to merge yields/VIX; treat as additional columns $m_t$ merged and scaled as above.
+- **Macro benchmarks:** merge yields/VIX via FRED or yfinance fallback; treat as additional columns $m_t$ merged and scaled as above.
