@@ -32,17 +32,45 @@ def _get_vader_analyzer():
     SentimentIntensityAnalyzer or None
         VADER analyzer if available, None otherwise.
     """
+    import os
+    
     try:
         import nltk
         from nltk.sentiment.vader import SentimentIntensityAnalyzer
 
+        # Detect CI environment
+        in_ci = os.getenv("CI") == "true" or os.getenv("GITHUB_ACTIONS") == "true"
+        
+        # Check if lexicon is available
+        lexicon_available = False
         try:
             nltk.data.find("sentiment/vader_lexicon.zip")
+            lexicon_available = True
         except LookupError:
-            logger.info("Downloading VADER lexicon...")
-            nltk.download("vader_lexicon", quiet=True)
+            if in_ci:
+                # Do not attempt download in CI
+                logger.info("VADER lexicon not found in CI environment. Falling back to TextBlob.")
+                return None
+            else:
+                logger.info("Downloading VADER lexicon...")
+                try:
+                    nltk.download("vader_lexicon", quiet=True)
+                    # Verify download succeeded
+                    nltk.data.find("sentiment/vader_lexicon.zip")
+                    lexicon_available = True
+                except (Exception, LookupError) as e:
+                    logger.warning(f"Failed to download VADER lexicon: {e}. Falling back to TextBlob.")
+                    return None
 
-        return SentimentIntensityAnalyzer()
+        # Instantiate analyzer only if lexicon is confirmed available
+        if lexicon_available:
+            try:
+                return SentimentIntensityAnalyzer()
+            except LookupError as e:
+                logger.warning(f"VADER lexicon missing during instantiation: {e}. Falling back to TextBlob.")
+                return None
+        
+        return None
     except ImportError:
         logger.warning("NLTK not installed. VADER sentiment unavailable.")
         return None
