@@ -7,9 +7,10 @@ ready dataframe containing feature columns and supervised learning targets.
 """
 from __future__ import annotations
 
+import argparse
 import logging
 from pathlib import Path
-from typing import Tuple
+from typing import Iterable, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -296,22 +297,33 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     return full_df
 
 
-def save_features(df: pd.DataFrame, filename: str = "model_features.parquet") -> Path:
-    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = PROCESSED_DIR / filename
+def save_features(df: pd.DataFrame, output_path: Path) -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(output_path, index=False)
     LOGGER.info("Saved engineered features to %s", output_path)
     return output_path
 
 
-def main() -> Path:
+def parse_args(cmd_args: Optional[Iterable[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Engineer features for market forecasting.")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=PROCESSED_DIR / "model_features.parquet",
+        help="Path to output parquet file (default: data/processed/model_features.parquet)",
+    )
+    return parser.parse_args(cmd_args)
+
+
+def main(cmd_args: Optional[Iterable[str]] = None) -> Path:
     logging.basicConfig(level="INFO")
+    ns = parse_args(cmd_args)
     input_path = PROCESSED_DIR / "combined_features.csv"
     if not input_path.exists():
         raise FileNotFoundError("Run src.data.align_data before engineering features")
     df = pd.read_csv(input_path, parse_dates=["date"])
     engineered = engineer_features(df)
-    return save_features(engineered)
+    return save_features(engineered, ns.output)
 
 
 if __name__ == "__main__":
