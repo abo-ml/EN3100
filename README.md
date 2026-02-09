@@ -101,10 +101,38 @@ This section summarizes the APIs used by the project and which are required vs o
 > ```bash
 > export ALPHAVANTAGE_API_KEY="your-alpha-vantage-key"
 > export FRED_API_KEY="your-fred-key"            # optional, for macro data
+> export NEWSAPI_KEY="your-newsapi-key"          # optional, for news sentiment
 > export APCA_API_KEY_ID="your-alpaca-key"       # optional, for order book
 > export APCA_API_SECRET_KEY="your-alpaca-secret"
 > export APCA_API_BASE_URL="https://paper-api.alpaca.markets"
 > ```
+
+### Missing API Key Behavior
+
+The codebase validates environment variables and provides clear warnings when API keys are missing. Instead of causing silent failures, missing keys trigger informative log messages:
+
+| API Key | Behavior When Missing |
+|---------|----------------------|
+| `ALPHAVANTAGE_API_KEY` | Logs warning and skips Alpha Vantage, falls back to yfinance/Stooq |
+| `FRED_API_KEY` | Logs warning, FRED macro data download may fail |
+| `NEWSAPI_KEY` | Logs warning, News API features unavailable (future enhancement) |
+| `APCA_API_KEY_ID` / `APCA_API_SECRET_KEY` | Logs warning, returns empty order book snapshot instead of failing |
+
+**Example warning message:**
+```
+WARNING - ALPHAVANTAGE_API_KEY not set. Please set this environment variable to use the associated API. See README.md for configuration instructions.
+```
+
+Use the `get_api_key()` helper from `src.utils` to check API keys with consistent warning behavior:
+
+```python
+from src.utils import get_api_key
+
+api_key = get_api_key("ALPHAVANTAGE_API_KEY")
+if not api_key:
+    # Handle missing key gracefully (skip, use fallback, etc.)
+    return None
+```
 
 ### Minimum Viable Configuration
 

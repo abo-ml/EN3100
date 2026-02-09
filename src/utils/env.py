@@ -107,8 +107,59 @@ def check_env_var(var_name: str, warn_if_missing: bool = True) -> Optional[str]:
     return value.strip()
 
 
+def get_api_key(name: str) -> str:
+    """Get an API key from environment variables with clear warning if missing.
+
+    This helper function uses os.getenv() to retrieve API keys and logs a clear
+    warning message if the key is not set or is empty. It is designed for use
+    with external service API keys like ALPHAVANTAGE_API_KEY, FRED_API_KEY,
+    NEWSAPI_KEY, APCA_API_KEY_ID, and APCA_API_SECRET_KEY.
+
+    Parameters
+    ----------
+    name : str
+        Name of the environment variable containing the API key.
+        Common values include:
+        - ALPHAVANTAGE_API_KEY: Alpha Vantage market data
+        - FRED_API_KEY: Federal Reserve Economic Data
+        - NEWSAPI_KEY: News API for sentiment analysis
+        - APCA_API_KEY_ID: Alpaca trading API key ID
+        - APCA_API_SECRET_KEY: Alpaca trading API secret
+
+    Returns
+    -------
+    str
+        The API key value if set, or an empty string if not set or empty.
+        Callers should check for empty string to determine if the key is valid.
+
+    Examples
+    --------
+    >>> api_key = get_api_key("ALPHAVANTAGE_API_KEY")
+    >>> if not api_key:
+    ...     print("API key not set, skipping Alpha Vantage")
+    ...     return None
+
+    >>> fred_key = get_api_key("FRED_API_KEY")
+    >>> if fred_key:
+    ...     # Use FRED API
+    ...     pass
+    """
+    value = os.getenv(name)
+
+    if value is None or value.strip() == "":
+        logger.warning(
+            "%s not set. Please set this environment variable to use the "
+            "associated API. See README.md for configuration instructions.",
+            name,
+        )
+        return ""
+
+    return value.strip()
+
+
 __all__ = [
     "MissingEnvironmentVariableError",
     "get_env_var",
     "check_env_var",
+    "get_api_key",
 ]

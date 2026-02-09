@@ -3,6 +3,7 @@
 from .env import (
     MissingEnvironmentVariableError,
     check_env_var,
+    get_api_key,
     get_env_var,
 )
 from .paths import (
@@ -27,5 +28,6 @@ __all__ = [
     "ensure_directories",
     "get_env_var",
     "check_env_var",
+    "get_api_key",
     "MissingEnvironmentVariableError",
 ]
