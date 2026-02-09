@@ -51,7 +51,7 @@ The mixed-asset workflow remains the default path for the dissertation. The new 
 │   ├── plot_walk_forward.py
 │   └── smoke_check.sh      # Basic syntax/import checks
 ├── src/
-│   ├── advanced/           # Future-work stubs (order flow, pattern recognition, RL)
+│   ├── advanced/           # Advanced modules (order flow, pattern recognition, RL)
 │   ├── data/               # Data acquisition & alignment
 │   ├── evaluation/         # Metrics, walk-forward, reporting utilities
 │   ├── experiments/        # Per-asset & equity universe evaluation scripts
@@ -60,7 +60,7 @@ The mixed-asset workflow remains the default path for the dissertation. The new 
 │   ├── risk/               # Monte Carlo risk analysis
 │   ├── universe/           # S&P 500 universe utilities
 │   └── utils/              # Shared path utilities
-├── tests/                  # Unit tests for data downloads and placeholders
+├── tests/                  # Unit tests for data downloads and advanced modules
 ├── tools/
 │   └── md_to_doc_pdf.py    # Report conversion utility
 ├── market_forecasting.py   # Standalone demonstration module
@@ -95,6 +95,14 @@ This section summarizes the APIs used by the project and which are required vs o
 | **Stooq** (via pandas_datareader) | Free OHLCV data fallback | Fallback when Alpha Vantage and yfinance fail | No API key required |
 
 > **Quick Reference – Environment Variables:**
+> 
+> | Variable | Purpose |
+> |----------|---------|
+> | **`ALPHAVANTAGE_API_KEY`** | Alpha Vantage API key (primary data provider) |
+> | **`APCA_API_KEY_ID`** | Alpaca API key ID (for order book data) |
+> | **`APCA_API_SECRET_KEY`** | Alpaca API secret key |
+> | **`FRED_API_KEY`** | FRED API key (for macro data) |
+>
 > ```bash
 > export ALPHAVANTAGE_API_KEY="your-alpha-vantage-key"
 > export FRED_API_KEY="your-fred-key"            # optional, for macro data
@@ -117,9 +125,13 @@ This is ideal for testing and development. For production/dissertation work, Alp
 ### Provider Fallback Order
 
 The data download module uses the following provider order by default:
-1. **Alpha Vantage** (primary, requires API key) - skipped for premium-only tickers
+1. **Alpha Vantage** (primary, requires `ALPHAVANTAGE_API_KEY`) - skipped for premium-only tickers
 2. **yfinance** (fallback, no API key required)
 3. **Stooq** (final fallback, requires `pandas_datareader>=0.10`)
+
+For macro data (yields, VIX, etc.):
+1. **FRED** (optional, requires `FRED_API_KEY`)
+2. **yfinance** (fallback for common indices)
 
 ### What Works Without APIs
 
@@ -164,7 +176,7 @@ python -m src.data.download_data \
 Optional arguments allow changing the interval, retry policy, output format, and overriding the API key via `--api-key`. **TODO:** replace the dummy `fetch_orderbook_snapshot` implementation with a real broker API call (Interactive Brokers, Alpaca, etc.) when credentials are available.
 
 ### 3. Align data sources
-Merge OHLCV, placeholder order flow, sentiment, and macro features into a single dataset.
+Merge OHLCV, order flow (when available), sentiment, and macro features into a single dataset.
 ```bash
 python -m src.data.align_data
 ```
@@ -189,11 +201,11 @@ The `engineer_features.py` module computes the following features per ticker:
 | `volume_zscore_63` | Volume Z-score | window=63 |
 | `tsmom_252` | Time-series momentum | lookback=252 |
 | `swing_high`, `swing_low` | Local swing points | window=3 |
-| `ofi`, `depth_ratio`, `bid_ask_spread` | Microstructure features | Placeholder (zeros until order-book data integrated) |
+| `ofi`, `depth_ratio`, `bid_ask_spread` | Microstructure features | Zeros until order-book data integrated |
 | `ma_bullish_crossover`, `ma_bearish_crossover` | Moving average crossovers | fast=10, slow=50 |
 | `swing_high_flag`, `swing_low_flag` | Local high/low flags | window=3 |
-| `pattern_head_shoulders`, `pattern_double_top`, `pattern_double_bottom` | Chart pattern flags | Rule-based detection using peak/trough analysis (window=5, tolerance=0.02) |
-| `ict_smt_asia` | ICT/SMT Asia session feature | Placeholder |
+| `pattern_head_shoulders`, `pattern_double_top`, `pattern_double_bottom` | Chart pattern flags | **Implemented**: Rule-based detection using peak/trough analysis (window=5, tolerance=0.02) |
+| `ict_smt_asia` | ICT/SMT Asia session feature | Uses previous day's range as proxy; returns zeros when no breakout detected |
 | `liquidity_grab` | Liquidity grab detection | Future work (volume_threshold=2.0, reversal_threshold=0.005, lookback=5) |
 | `fvg` | Fair value gap detection | Future work (min_gap_percent=0.001, fill_lookforward=5) |
 | `asia_breakout` | Asia session range breakout | Future work (asia_start=0, asia_end=6, london_start=8, london_end=12) |
@@ -376,14 +388,14 @@ streamlit run app/streamlit_app.py
 The UI is for demonstration/visualisation only; dissertation results should continue to use the deterministic CLI flows above.
 
 ## Running Tests
-Run the test suite with pytest to verify data downloads and placeholder guards:
+Run the test suite with pytest to verify data downloads and advanced module functionality:
 ```bash
 pip install pytest
 pytest tests/ -v
 ```
 Tests include:
 - `test_download_data.py`: validates provider fallback and CLI parser
-- `test_placeholders.py`: ensures unimplemented advanced modules raise `NotImplementedError`
+- `test_placeholders.py`: validates advanced modules (order flow, pattern detection, RL environment)
 
 A smoke-check script is also available for quick syntax verification:
 ```bash
@@ -396,8 +408,8 @@ bash scripts/smoke_check.sh
 3. **Iteration 2 – Tree-Based Ensembles:** Random Forest, optional XGBoost, and SVM classifiers capture nonlinear relationships and deliver feature importance insights.
 4. **Iteration 2.1 – LightGBM Upgrade:** Extends Iteration 2 with a gradient-boosted tree regressor (LightGBM) plus feature importances, allowing a direct comparison to the Random Forest/XGBoost ensemble.
 5. **Iteration 3 – LSTM Sequence Model:** Recurrent neural networks learn temporal dependencies over rolling windows and introduce deep learning considerations (scaling, early stopping, regularisation).
-6. **Iteration 4 – Transformer Encoder:** Attention mechanisms handle long-range dependencies and multimodal inputs (price, sentiment, order flow placeholders) for enhanced forecasting power.
-7. **Iteration 5 – Meta-Ensemble with Risk Layer:** Stacks the strongest models, applies dynamic volatility-aware position sizing, and outlines execution scheduling stubs (VWAP/TWAP, pairs trading hook).
+6. **Iteration 4 – Transformer Encoder:** Attention mechanisms handle long-range dependencies and multimodal inputs (price, sentiment, order flow) for enhanced forecasting power.
+7. **Iteration 5 – Meta-Ensemble with Risk Layer:** Stacks the strongest models, applies dynamic volatility-aware position sizing, and includes execution scheduling (VWAP/TWAP, pairs trading hook).
 8. **Iteration 5 – Monte Carlo Risk:** A standalone Monte Carlo module bootstraps Iteration 5 strategy returns to stress-test equity curve variability, drawdown risk, and tail outcomes.
 
 ### Model Hyperparameters
