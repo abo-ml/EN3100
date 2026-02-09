@@ -11,6 +11,9 @@ Configuration:
     - For Alpaca: APCA_API_KEY_ID, APCA_API_SECRET_KEY
     - For Binance: BINANCE_API_KEY, BINANCE_API_SECRET
     - APCA_API_BASE_URL: (optional) defaults to paper trading URL
+
+Environment variable validation uses check_env_var from src.utils for
+consistent error handling and helpful warning messages.
 """
 from __future__ import annotations
 
@@ -21,6 +24,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+
+from ..utils import check_env_var
 
 logger = logging.getLogger(__name__)
 
@@ -135,21 +140,25 @@ def _fetch_alpaca_orderbook(symbol: str, top_n: int) -> OrderBookSnapshot:
 
     Note: Alpaca's free tier provides limited order book data.
     For full Level 2 data, a paid subscription may be required.
+
+    Returns empty OrderBookSnapshot with warning if APCA_API_KEY_ID or
+    APCA_API_SECRET_KEY are not set.
     """
     try:
         import requests
     except ImportError:
         raise ImportError("requests library required for API calls. Install with: pip install requests")
 
-    api_key = os.environ.get("APCA_API_KEY_ID")
-    api_secret = os.environ.get("APCA_API_SECRET_KEY")
+    # Check for required Alpaca API keys using check_env_var utility
+    api_key = check_env_var("APCA_API_KEY_ID", warn_if_missing=False)
+    api_secret = check_env_var("APCA_API_SECRET_KEY", warn_if_missing=False)
     base_url = os.environ.get("APCA_API_BASE_URL", "https://paper-api.alpaca.markets")
 
     if not api_key or not api_secret:
-        # Return empty snapshot with warning if no API keys
+        # Return empty OrderBookSnapshot with warning if no API keys
         logger.warning(
             "Alpaca API keys not configured. Set APCA_API_KEY_ID and APCA_API_SECRET_KEY "
-            "environment variables for live order book data."
+            "environment variables for live order book data. Returning empty snapshot."
         )
         return OrderBookSnapshot(
             symbol=symbol,
@@ -498,8 +507,9 @@ def place_alpaca_order(
         )
 
     base_url = os.environ.get("APCA_API_BASE_URL", "https://paper-api.alpaca.markets")
-    key_id = os.environ.get("APCA_API_KEY_ID")
-    secret_key = os.environ.get("APCA_API_SECRET_KEY")
+    # Check for required Alpaca API keys using check_env_var utility
+    key_id = check_env_var("APCA_API_KEY_ID", warn_if_missing=False)
+    secret_key = check_env_var("APCA_API_SECRET_KEY", warn_if_missing=False)
 
     if not key_id or not secret_key:
         raise ValueError(

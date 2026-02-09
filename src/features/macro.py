@@ -13,12 +13,13 @@ Environment Variables:
 from __future__ import annotations
 
 import logging
-import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
+
+from ..utils import check_env_var
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +146,9 @@ def load_macro_factors_datareader(
     if start_date is None:
         start_date = (datetime.now() - timedelta(days=DEFAULT_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
 
-    api_key = os.environ.get("FRED_API_KEY")
+    # Check for FRED API key using utility function
+    # The check_env_var function logs a warning if the key is missing
+    api_key = check_env_var("FRED_API_KEY", warn_if_missing=True)
 
     macro_data = {}
 
