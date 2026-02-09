@@ -147,12 +147,8 @@ def load_macro_factors_datareader(
         start_date = (datetime.now() - timedelta(days=DEFAULT_LOOKBACK_DAYS)).strftime("%Y-%m-%d")
 
     # Check for FRED API key using utility function
+    # The check_env_var function logs a warning if the key is missing
     api_key = check_env_var("FRED_API_KEY", warn_if_missing=True)
-    if not api_key:
-        logger.warning(
-            "FRED_API_KEY not set. FRED data download may fail or be rate-limited. "
-            "Set FRED_API_KEY environment variable for reliable access."
-        )
 
     macro_data = {}
 

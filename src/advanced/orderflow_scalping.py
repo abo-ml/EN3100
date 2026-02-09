@@ -155,7 +155,7 @@ def _fetch_alpaca_orderbook(symbol: str, top_n: int) -> OrderBookSnapshot:
     base_url = os.environ.get("APCA_API_BASE_URL", "https://paper-api.alpaca.markets")
 
     if not api_key or not api_secret:
-        # Return empty DataFrame with warning if no API keys (as per requirements)
+        # Return empty OrderBookSnapshot with warning if no API keys
         logger.warning(
             "Alpaca API keys not configured. Set APCA_API_KEY_ID and APCA_API_SECRET_KEY "
             "environment variables for live order book data. Returning empty snapshot."
