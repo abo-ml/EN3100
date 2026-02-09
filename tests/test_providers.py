@@ -1,4 +1,6 @@
 """Tests for data provider fallback logic and configuration warnings."""
+import logging
+
 import pandas as pd
 import pytest
 
@@ -96,8 +98,6 @@ def test_all_providers_fallback_order(monkeypatch):
 
 def test_env_var_warning_when_api_key_missing(monkeypatch, caplog):
     """Test that a warning is raised when Alpha Vantage API key is missing."""
-    import logging
-
     # Remove any existing API key environment variables
     monkeypatch.delenv("ALPHAVANTAGE_API_KEY", raising=False)
     monkeypatch.delenv("ALPHA_VANTAGE_API_KEY", raising=False)
@@ -114,8 +114,6 @@ def test_env_var_warning_when_api_key_missing(monkeypatch, caplog):
 
 def test_env_var_warning_when_api_key_empty(monkeypatch, caplog):
     """Test that a warning is raised when Alpha Vantage API key is empty string."""
-    import logging
-
     # Set an empty API key
     monkeypatch.setenv("ALPHAVANTAGE_API_KEY", "   ")
     monkeypatch.delenv("ALPHA_VANTAGE_API_KEY", raising=False)
