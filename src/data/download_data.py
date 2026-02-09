@@ -328,8 +328,9 @@ def _download_stooq(ticker: str, config: DownloadConfig) -> Optional[pd.DataFram
     """Download OHLCV data via Stooq (pandas_datareader fallback).
 
     Stooq provides free data for many tickers when Alpha Vantage and yfinance fail.
-    This is particularly useful for tickers not available on Alpha Vantage or yfinance,
-    such as XAUUSD=X (gold spot) and ^GSPC (S&P 500 index).
+    This is particularly useful for tickers that may not be available on other
+    providers, such as certain FX pairs (e.g., XAUUSD=X for gold spot) or indices
+    (e.g., ^GSPC for S&P 500) when primary providers experience issues.
 
     Requires pandas_datareader to be installed: pip install pandas_datareader>=0.10
 
