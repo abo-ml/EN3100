@@ -1,4 +1,5 @@
 """Tests for environment variable utilities."""
+import logging
 import os
 import pytest
 from src.utils.env import (
@@ -76,7 +77,6 @@ class TestCheckEnvVar:
     def test_check_env_var_returns_none_when_not_set(self, monkeypatch, caplog):
         """Test that check_env_var returns None and logs a warning when not set."""
         monkeypatch.delenv("TEST_VAR_NOT_SET", raising=False)
-        import logging
         with caplog.at_level(logging.WARNING):
             result = check_env_var("TEST_VAR_NOT_SET")
         assert result is None
@@ -85,7 +85,6 @@ class TestCheckEnvVar:
     def test_check_env_var_returns_none_when_empty(self, monkeypatch, caplog):
         """Test that check_env_var returns None and logs a warning when empty."""
         monkeypatch.setenv("TEST_VAR", "")
-        import logging
         with caplog.at_level(logging.WARNING):
             result = check_env_var("TEST_VAR")
         assert result is None
@@ -94,7 +93,6 @@ class TestCheckEnvVar:
     def test_check_env_var_no_warning_when_disabled(self, monkeypatch, caplog):
         """Test that check_env_var does not log when warn_if_missing=False."""
         monkeypatch.delenv("TEST_VAR_NOT_SET", raising=False)
-        import logging
         with caplog.at_level(logging.WARNING):
             result = check_env_var("TEST_VAR_NOT_SET", warn_if_missing=False)
         assert result is None
@@ -136,7 +134,6 @@ class TestAlphaVantageApiKeyCheck:
             api_key=None,
         )
 
-        import logging
         with caplog.at_level(logging.WARNING):
             result = dd._download_alpha_vantage("AAPL", config)
 
@@ -214,7 +211,6 @@ class TestGetApiKey:
     def test_get_api_key_returns_empty_string_when_not_set(self, monkeypatch, caplog):
         """Test that get_api_key returns empty string and logs a warning when not set."""
         monkeypatch.delenv("TEST_API_KEY_NOT_SET", raising=False)
-        import logging
         with caplog.at_level(logging.WARNING):
             result = get_api_key("TEST_API_KEY_NOT_SET")
         assert result == ""
@@ -224,7 +220,6 @@ class TestGetApiKey:
     def test_get_api_key_returns_empty_string_when_empty(self, monkeypatch, caplog):
         """Test that get_api_key returns empty string and logs a warning when empty."""
         monkeypatch.setenv("TEST_API_KEY", "")
-        import logging
         with caplog.at_level(logging.WARNING):
             result = get_api_key("TEST_API_KEY")
         assert result == ""
@@ -233,7 +228,6 @@ class TestGetApiKey:
     def test_get_api_key_returns_empty_string_when_whitespace_only(self, monkeypatch, caplog):
         """Test that get_api_key returns empty string when value is only whitespace."""
         monkeypatch.setenv("TEST_API_KEY", "   ")
-        import logging
         with caplog.at_level(logging.WARNING):
             result = get_api_key("TEST_API_KEY")
         assert result == ""
@@ -242,7 +236,6 @@ class TestGetApiKey:
     def test_get_api_key_warning_message_format(self, monkeypatch, caplog):
         """Test that get_api_key logs a clear warning message with README reference."""
         monkeypatch.delenv("ALPHAVANTAGE_API_KEY", raising=False)
-        import logging
         with caplog.at_level(logging.WARNING):
             get_api_key("ALPHAVANTAGE_API_KEY")
         assert "ALPHAVANTAGE_API_KEY not set" in caplog.text
