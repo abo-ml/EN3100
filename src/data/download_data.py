@@ -161,9 +161,7 @@ def _convert_ohlcv_columns(df: pd.DataFrame) -> pd.DataFrame:
 def _basic_clean_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
     """Perform basic cleaning on OHLCV data (forward fill and drop NaN close)."""
     df = df.ffill()
-    if "close" in df.columns:
-        df = df.dropna(subset=["close"])
-    return df
+    return df.dropna(subset=["close"])
 
 
 def _alpha_vantage_equity(ticker: str, config: DownloadConfig) -> pd.DataFrame:
@@ -255,6 +253,8 @@ def _download_alpha_vantage(ticker: str, config: DownloadConfig) -> pd.DataFrame
     time.sleep(config.pause)
     if "date" not in data.columns:
         raise ValueError("Downloaded data missing 'date' column")
+    # Apply column conversion for consistency
+    data = _convert_ohlcv_columns(data)
     data["ticker"] = ticker
     data.sort_values("date", inplace=True)
     return data
