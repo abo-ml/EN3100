@@ -29,8 +29,9 @@ def test_download_yfinance_normalization_standard_columns(monkeypatch):
     
     The function properly normalizes it to have:
     - 'date' column (timezone-naive)
-    - 'close' column
-    - 'adj_close' column
+    - 'close' column (copied from Adj Close when available)
+    - 'adj_close' column (copied from Adj Close when available)
+    - 'ticker' column (added by the function)
     """
     def mock_download(*args, **kwargs):
         # Create a DataFrame as yfinance would return it
@@ -62,10 +63,12 @@ def test_download_yfinance_normalization_standard_columns(monkeypatch):
     if hasattr(result["date"].dtype, "tz"):
         assert result["date"].dtype.tz is None, "Date should be timezone-naive"
     
-    # Additional checks: verify data integrity
+    # Additional checks: verify data integrity and ticker column
     assert len(result) == 3, "Should have 3 rows"
     assert result["close"].iloc[0] == 152.5, "close should be equal to Adj Close"
     assert result["adj_close"].iloc[0] == 152.5, "adj_close should be equal to Adj Close"
+    assert "ticker" in result.columns, "Function should add ticker column"
+    assert result["ticker"].iloc[0] == "AAPL", "Ticker column should contain the ticker symbol"
 
 
 def test_download_yfinance_normalization_with_timezone(monkeypatch):
@@ -73,7 +76,8 @@ def test_download_yfinance_normalization_with_timezone(monkeypatch):
     Test that _download_yfinance properly removes timezone from date column.
     
     This test ensures timezone-aware DatetimeIndex from yfinance is converted
-    to timezone-naive datetime in the returned DataFrame.
+    to timezone-naive datetime in the returned DataFrame. Also verifies that
+    the ticker column is added.
     """
     def mock_download(*args, **kwargs):
         # Create a DataFrame with timezone-aware DatetimeIndex
@@ -99,6 +103,10 @@ def test_download_yfinance_normalization_with_timezone(monkeypatch):
     assert result["date"].dtype.name == "datetime64[ns]"
     if hasattr(result["date"].dtype, "tz"):
         assert result["date"].dtype.tz is None, "Date should be timezone-naive after normalization"
+    
+    # Assert: ticker column is present
+    assert "ticker" in result.columns
+    assert result["ticker"].iloc[0] == "AAPL"
 
 
 def test_download_yfinance_normalization_multiindex_columns(monkeypatch):
@@ -107,7 +115,7 @@ def test_download_yfinance_normalization_multiindex_columns(monkeypatch):
     
     This test ensures that when yfinance returns a DataFrame with MultiIndex columns
     (e.g., when downloading multiple tickers), the function properly flattens them
-    and normalizes the output.
+    and normalizes the output. Verifies that the ticker column is correctly added.
     """
     def mock_download(*args, **kwargs):
         # Create a DataFrame with MultiIndex columns as yfinance sometimes returns
@@ -162,7 +170,7 @@ def test_download_yfinance_no_exceptions_raised(monkeypatch):
     Test that _download_yfinance does not raise exceptions for valid input.
     
     This is a regression test to ensure the normalization process doesn't
-    introduce unexpected errors.
+    introduce unexpected errors. Also verifies the ticker column is added.
     """
     def mock_download(*args, **kwargs):
         df = pd.DataFrame({
@@ -185,5 +193,7 @@ def test_download_yfinance_no_exceptions_raised(monkeypatch):
         assert "date" in result.columns
         assert "close" in result.columns
         assert "adj_close" in result.columns
+        assert "ticker" in result.columns
+        assert result["ticker"].iloc[0] == "AAPL"
     except Exception as e:
         raise AssertionError(f"_download_yfinance raised unexpected exception: {e}")
