@@ -281,12 +281,14 @@ def _download_alpha_vantage(ticker: str, config: DownloadConfig) -> Optional[pd.
 
 
 def _download_yfinance(ticker: str, config: DownloadConfig) -> Optional[pd.DataFrame]:
-    """Download OHLCV data via yfinance.
+    """Download OHLCV data via yfinance with robust MultiIndex handling.
 
-    Returns None if data is empty or required columns are missing.
+    Returns None or raises ValueError if data is empty or required columns are missing.
+    Always produces: date, open, high, low, close, adj_close, volume, ticker
     """
     LOGGER.info("Downloading %s via yfinance", ticker)
-    # Step 1: Call yfinance download
+    
+    # Step 1: Download data
     data = yf.download(
         ticker,
         start=config.start,
@@ -294,54 +296,115 @@ def _download_yfinance(ticker: str, config: DownloadConfig) -> Optional[pd.DataF
         interval=config.interval,
         progress=False,
     )
-    # Step 2: If empty, return None
+    
+    # Step 2: Return None if empty
     if data.empty:
         LOGGER.warning("No data returned for %s from yfinance", ticker)
         return None
 
-    # Step 3: Reset index and rename Date to date
-    data.reset_index(inplace=True)
-    # Handle both 'Date' (typical) and 'index' (after reset)
-    if "Date" in data.columns:
-        data.rename(columns={"Date": "date"}, inplace=True)
-    elif "index" in data.columns:
-        data.rename(columns={"index": "date"}, inplace=True)
+    # Step 3: Handle MultiIndex columns
+    if isinstance(data.columns, pd.MultiIndex):
+        # Flatten MultiIndex by taking the first level
+        data.columns = data.columns.get_level_values(0)
+    
+    # If column names still contain ticker suffixes like ('Close', 'AAPL'), clean them
+    # This handles cases where columns might be tuples after flattening
+    if data.columns.dtype == object:
+        try:
+            # Try to convert tuple columns to strings if needed
+            new_cols = []
+            for col in data.columns:
+                if isinstance(col, tuple):
+                    # Take first element of tuple, handle None case
+                    new_cols.append(col[0] if col[0] is not None else str(col))
+                else:
+                    new_cols.append(col)
+            data.columns = new_cols
+        except (AttributeError, TypeError):
+            pass  # Columns are already in correct format
 
+    # Step 4: Convert index to column and rename Date -> date (case-insensitive)
+    data.reset_index(inplace=True)
+    
+    # Find date column (case-insensitive search for 'Date' or 'date')
+    date_col = None
+    for col in data.columns:
+        if isinstance(col, str) and col.lower() == "date":
+            date_col = col
+            break
+    
+    if date_col and date_col != "date":
+        data.rename(columns={date_col: "date"}, inplace=True)
+    elif "index" in data.columns:
+        # Fallback: if no Date column found, rename 'index' to 'date'
+        data.rename(columns={"index": "date"}, inplace=True)
+    
     if "date" not in data.columns:
         LOGGER.warning("Downloaded data missing 'date' column for %s", ticker)
         return None
 
-    # Ensure date is timezone-naive
+    # Step 5: Ensure date is timezone naive
     data["date"] = _ensure_timezone_naive(data["date"])
 
-    # Step 4: Convert OHLCV columns to lowercase (excluding Close/Adj Close)
-    data = _convert_ohlcv_columns(data)
-
-    # Step 5: Create "close" and "adj_close" columns
-    if "Adj Close" in data.columns:
-        data["close"] = data["Adj Close"]
-        data["adj_close"] = data["Adj Close"]
-    elif "Close" in data.columns:
-        data["close"] = data["Close"]
-        data["adj_close"] = data["Close"]
+    # Step 6: Standardize OHLCV columns to lowercase
+    # First, create a case-insensitive mapping for all columns
+    column_mapping = {}
+    for col in data.columns:
+        if isinstance(col, str):
+            col_lower = col.lower()
+            # Map various column names to standard lowercase
+            if col_lower in ["open", "high", "low", "volume"]:
+                column_mapping[col] = col_lower
+    
+    data.rename(columns=column_mapping, inplace=True)
+    
+    # Step 7: Handle Close and Adj Close with priority logic
+    # Priority: Adj Close exists -> use for both close and adj_close
+    #          Else Close exists -> use for both
+    #          Else fail cleanly
+    
+    # Find Close and Adj Close columns (case-insensitive)
+    close_col = None
+    adj_close_col = None
+    
+    for col in data.columns:
+        if isinstance(col, str):
+            col_lower = col.lower()
+            if col_lower == "close":
+                close_col = col
+            elif col_lower == "adj close" or col_lower == "adj_close" or col_lower == "adjclose":
+                adj_close_col = col
+    
+    # Apply priority logic
+    if adj_close_col:
+        data["close"] = data[adj_close_col]
+        data["adj_close"] = data[adj_close_col]
+    elif close_col:
+        data["close"] = data[close_col]
+        data["adj_close"] = data[close_col]
     else:
         LOGGER.warning("Downloaded data missing 'Close' or 'Adj Close' for %s", ticker)
         return None
-
-    # Ensure volume column exists
+    
+    # Ensure volume exists
     if "volume" not in data.columns:
         data["volume"] = np.nan
+    
+    # Ensure open, high, low exist (use NaN if missing)
+    for col in ["open", "high", "low"]:
+        if col not in data.columns:
+            data[col] = np.nan
 
-    # Step 6: Sort by date, forward-fill missing values, drop rows where close is NaN
+    # Step 8: Add final cleaning
     data.sort_values("date", inplace=True)
     data = data.ffill()
     data = data.dropna(subset=["close"])
-
+    
     # Add ticker column
     data["ticker"] = ticker
 
-    # Step 7: Return the cleaned DataFrame
-    return data
+    # Step 9: Return DataFrame with columns in specified order
+    return data[["date", "open", "high", "low", "close", "adj_close", "volume", "ticker"]]
 
 
 def _download_stooq(ticker: str, config: DownloadConfig) -> Optional[pd.DataFrame]:
