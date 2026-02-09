@@ -163,3 +163,38 @@ def test_premium_only_tickers_set():
     assert "AAPL" in dd.PREMIUM_ONLY_TICKERS
     assert "MSFT" in dd.PREMIUM_ONLY_TICKERS
     assert "GOOGL" in dd.PREMIUM_ONLY_TICKERS
+
+
+def test_download_yfinance_multilevel_columns(monkeypatch):
+    """Test that _download_yfinance handles multi-level columns (e.g., ('Close', 'AAPL'))."""
+    import yfinance as yf
+
+    def mock_download(*args, **kwargs):
+        # Create a DataFrame with multi-level columns as yfinance sometimes returns
+        arrays = [
+            ["Open", "High", "Low", "Close", "Adj Close", "Volume"],
+            ["AAPL", "AAPL", "AAPL", "AAPL", "AAPL", "AAPL"],
+        ]
+        tuples = list(zip(*arrays))
+        columns = pd.MultiIndex.from_tuples(tuples)
+        data = pd.DataFrame(
+            [[1, 1.5, 0.8, 1.2, 1.25, 1000], [2, 2.5, 1.8, 2.2, 2.25, 2000]],
+            index=pd.to_datetime(["2024-01-02", "2024-01-03"]),
+            columns=columns,
+        )
+        data.index.name = "Date"
+        # Flatten the multi-level columns (this is what yfinance does internally sometimes)
+        data.columns = data.columns.get_level_values(0)
+        return data
+
+    monkeypatch.setattr(yf, "download", mock_download)
+    result = dd._download_yfinance("AAPL", DummyConfig())
+
+    assert result is not None
+    assert "date" in result.columns
+    assert "close" in result.columns
+    assert "adj_close" in result.columns
+    assert "open" in result.columns
+    assert "high" in result.columns
+    assert "low" in result.columns
+    assert "volume" in result.columns
