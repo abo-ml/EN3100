@@ -434,7 +434,6 @@ def test_download_single_ticker_yfinance_stooq_fail_uses_last_provider(monkeypat
     Mock yfinance and earlier providers to fail, but the last provider (stooq) succeeds.
     This confirms the fallback mechanism works correctly through the entire chain.
     """
-    import logging
     providers_called = []
 
     def mock_av_fail(*args, **kwargs):
@@ -485,8 +484,6 @@ def test_missing_alphavantage_api_key_logs_warning_and_uses_fallback(monkeypatch
     2. Fall back to yfinance or Stooq to fetch data
     3. Successfully return data from the fallback provider
     """
-    import logging
-
     # Ensure no Alpha Vantage API key is configured
     monkeypatch.delenv("ALPHAVANTAGE_API_KEY", raising=False)
     monkeypatch.delenv("ALPHA_VANTAGE_API_KEY", raising=False)
