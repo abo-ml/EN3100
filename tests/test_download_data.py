@@ -198,3 +198,152 @@ def test_download_yfinance_multilevel_columns(monkeypatch):
     assert "high" in result.columns
     assert "low" in result.columns
     assert "volume" in result.columns
+
+
+def test_download_yfinance_true_multiindex_columns(monkeypatch):
+    """Test that _download_yfinance handles actual MultiIndex columns without flattening."""
+    import yfinance as yf
+
+    def mock_download(*args, **kwargs):
+        # Create a DataFrame with true MultiIndex columns (not pre-flattened)
+        arrays = [
+            ["Open", "High", "Low", "Close", "Adj Close", "Volume"],
+            ["AAPL", "AAPL", "AAPL", "AAPL", "AAPL", "AAPL"],
+        ]
+        tuples = list(zip(*arrays))
+        columns = pd.MultiIndex.from_tuples(tuples)
+        data = pd.DataFrame(
+            [[1, 1.5, 0.8, 1.2, 1.25, 1000], [2, 2.5, 1.8, 2.2, 2.25, 2000]],
+            index=pd.to_datetime(["2024-01-02", "2024-01-03"]),
+            columns=columns,
+        )
+        data.index.name = "Date"
+        # Don't flatten - let the function handle it
+        return data
+
+    monkeypatch.setattr(yf, "download", mock_download)
+    result = dd._download_yfinance("AAPL", DummyConfig())
+
+    assert result is not None
+    assert "date" in result.columns
+    assert "close" in result.columns
+    assert "adj_close" in result.columns
+    assert result["close"].iloc[0] == 1.25  # Should use Adj Close
+    assert result["adj_close"].iloc[0] == 1.25
+
+
+def test_download_yfinance_case_insensitive_date(monkeypatch):
+    """Test that _download_yfinance handles DATE, Date, date columns case-insensitively."""
+    import yfinance as yf
+
+    def mock_download(*args, **kwargs):
+        df = pd.DataFrame({
+            "Open": [1, 2],
+            "High": [1.5, 2.5],
+            "Low": [0.8, 1.8],
+            "Close": [1.2, 2.2],
+            "Volume": [1000, 2000],
+        }, index=pd.to_datetime(["2024-01-02", "2024-01-03"]))
+        df.index.name = "DATE"  # Uppercase DATE
+        return df
+
+    monkeypatch.setattr(yf, "download", mock_download)
+    result = dd._download_yfinance("AAPL", DummyConfig())
+
+    assert result is not None
+    assert "date" in result.columns
+    assert pd.api.types.is_datetime64_any_dtype(result["date"])
+
+
+def test_download_yfinance_returns_correct_column_order(monkeypatch):
+    """Test that _download_yfinance returns columns in the correct order."""
+    import yfinance as yf
+
+    def mock_download(*args, **kwargs):
+        df = pd.DataFrame({
+            "Open": [1, 2],
+            "High": [1.5, 2.5],
+            "Low": [0.8, 1.8],
+            "Close": [1.2, 2.2],
+            "Adj Close": [1.25, 2.25],
+            "Volume": [1000, 2000],
+        }, index=pd.to_datetime(["2024-01-02", "2024-01-03"]))
+        df.index.name = "Date"
+        return df
+
+    monkeypatch.setattr(yf, "download", mock_download)
+    result = dd._download_yfinance("AAPL", DummyConfig())
+
+    expected_columns = ["date", "open", "high", "low", "close", "adj_close", "volume", "ticker"]
+    assert list(result.columns) == expected_columns
+
+
+def test_download_yfinance_adj_close_priority(monkeypatch):
+    """Test that _download_yfinance uses Adj Close for both close and adj_close when available."""
+    import yfinance as yf
+
+    def mock_download(*args, **kwargs):
+        df = pd.DataFrame({
+            "Open": [1, 2],
+            "High": [1.5, 2.5],
+            "Low": [0.8, 1.8],
+            "Close": [1.0, 2.0],  # Different from Adj Close
+            "Adj Close": [1.25, 2.25],
+            "Volume": [1000, 2000],
+        }, index=pd.to_datetime(["2024-01-02", "2024-01-03"]))
+        df.index.name = "Date"
+        return df
+
+    monkeypatch.setattr(yf, "download", mock_download)
+    result = dd._download_yfinance("AAPL", DummyConfig())
+
+    # Both close and adj_close should use Adj Close values
+    assert result["close"].iloc[0] == 1.25
+    assert result["adj_close"].iloc[0] == 1.25
+    assert result["close"].iloc[1] == 2.25
+    assert result["adj_close"].iloc[1] == 2.25
+
+
+def test_download_yfinance_only_close_no_adj_close(monkeypatch):
+    """Test that _download_yfinance uses Close for both when Adj Close is missing."""
+    import yfinance as yf
+
+    def mock_download(*args, **kwargs):
+        df = pd.DataFrame({
+            "Open": [1, 2],
+            "High": [1.5, 2.5],
+            "Low": [0.8, 1.8],
+            "Close": [1.2, 2.2],
+            "Volume": [1000, 2000],
+        }, index=pd.to_datetime(["2024-01-02", "2024-01-03"]))
+        df.index.name = "Date"
+        return df
+
+    monkeypatch.setattr(yf, "download", mock_download)
+    result = dd._download_yfinance("AAPL", DummyConfig())
+
+    # Both close and adj_close should use Close values
+    assert result["close"].iloc[0] == 1.2
+    assert result["adj_close"].iloc[0] == 1.2
+
+
+def test_download_yfinance_timezone_aware_date(monkeypatch):
+    """Test that _download_yfinance converts timezone-aware dates to naive."""
+    import yfinance as yf
+
+    def mock_download(*args, **kwargs):
+        df = pd.DataFrame({
+            "Open": [1, 2],
+            "High": [1.5, 2.5],
+            "Low": [0.8, 1.8],
+            "Close": [1.2, 2.2],
+            "Volume": [1000, 2000],
+        }, index=pd.to_datetime(["2024-01-02", "2024-01-03"]).tz_localize("UTC"))
+        df.index.name = "Date"
+        return df
+
+    monkeypatch.setattr(yf, "download", mock_download)
+    result = dd._download_yfinance("AAPL", DummyConfig())
+
+    assert result is not None
+    assert result["date"].dt.tz is None  # Should be timezone naive
