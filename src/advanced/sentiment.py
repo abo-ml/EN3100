@@ -5,16 +5,21 @@ Dictionary and sEntiment Reasoner) from NLTK or TextBlob as a fallback. It can
 fetch headlines from yfinance news or accept externally prepared sentiment data.
 
 Environment Variables:
-- NEWSAPI_KEY: Optional API key for NewsAPI integration (future enhancement)
+- NEWSAPI_KEY: Optional API key for NewsAPI integration (future enhancement).
+  When implementing NewsAPI support, use `check_env_var("NEWSAPI_KEY")` from
+  `src.utils` to validate the key is set before making API calls.
 """
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import Iterable, List, Optional
 
 import pandas as pd
+
+# Note: When implementing NewsAPI integration, use:
+#   from ..utils import check_env_var
+#   api_key = check_env_var("NEWSAPI_KEY", warn_if_missing=True)
 
 logger = logging.getLogger(__name__)
 

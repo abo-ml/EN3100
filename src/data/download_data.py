@@ -36,7 +36,7 @@ except (ImportError, TypeError):  # pragma: no cover
     pdr = None
     HAS_PANDAS_DATAREADER = False
 
-from ..utils import RAW_DATA_DIR
+from ..utils import RAW_DATA_DIR, check_env_var
 RAW_DATA_DIR = Path("data/raw")
 LOGGER = logging.getLogger(__name__)
 
@@ -110,25 +110,31 @@ def _get_api_key(config: DownloadConfig, provider: str) -> Optional[str]:
 
     For Alpha Vantage, checks config.api_key, then ALPHAVANTAGE_API_KEY,
     then ALPHA_VANTAGE_API_KEY environment variables.
+
+    Uses check_env_var utility for consistent environment variable handling.
     """
     if provider == "alpha_vantage":
-        api_key = config.api_key or os.environ.get("ALPHAVANTAGE_API_KEY") or os.environ.get(
-            "ALPHA_VANTAGE_API_KEY"
+        # First check config.api_key from command line
+        if config.api_key and config.api_key.strip():
+            return config.api_key.strip()
+
+        # Then check environment variables using check_env_var utility
+        api_key = check_env_var("ALPHAVANTAGE_API_KEY", warn_if_missing=False)
+        if api_key:
+            return api_key
+
+        api_key = check_env_var("ALPHA_VANTAGE_API_KEY", warn_if_missing=False)
+        if api_key:
+            return api_key
+
+        # No API key found - log a clear warning
+        LOGGER.warning(
+            "Alpha Vantage API key not configured. "
+            "Set ALPHAVANTAGE_API_KEY or ALPHA_VANTAGE_API_KEY environment variable, "
+            "or pass --api-key on the command line. "
+            "Falling back to other providers."
         )
-        if not api_key:
-            LOGGER.warning(
-                "Alpha Vantage API key not configured. "
-                "Set ALPHAVANTAGE_API_KEY or ALPHA_VANTAGE_API_KEY environment variable, "
-                "or pass --api-key on the command line. "
-                "Falling back to other providers."
-            )
-        elif not api_key.strip():
-            LOGGER.warning(
-                "Alpha Vantage API key is empty. "
-                "Ensure ALPHAVANTAGE_API_KEY or ALPHA_VANTAGE_API_KEY contains a valid key."
-            )
-            return None
-        return api_key
+        return None
     return None
 
 
@@ -238,8 +244,22 @@ def _alpha_vantage_fx(pair: str, config: DownloadConfig) -> pd.DataFrame:
     return data[["date", "open", "high", "low", "close", "adj_close", "volume"]]
 
 
-def _download_alpha_vantage(ticker: str, config: DownloadConfig) -> pd.DataFrame:
-    """Download OHLCV data via Alpha Vantage with appropriate endpoint selection."""
+def _download_alpha_vantage(ticker: str, config: DownloadConfig) -> Optional[pd.DataFrame]:
+    """Download OHLCV data via Alpha Vantage with appropriate endpoint selection.
+
+    Returns None (with warning) if ALPHAVANTAGE_API_KEY is not set, allowing
+    fallback to other providers instead of raising an exception.
+    """
+    # Check for API key at the start - return None if missing instead of raising
+    api_key = _get_api_key(config, "alpha_vantage")
+    if not api_key:
+        LOGGER.warning(
+            "Skipping Alpha Vantage download for %s: API key not configured. "
+            "Set ALPHAVANTAGE_API_KEY environment variable or pass --api-key.",
+            ticker,
+        )
+        return None
+
     if config.interval != "1d":
         raise ValueError("Alpha Vantage integration currently supports only daily data")
     LOGGER.info("Downloading %s via Alpha Vantage", ticker)
@@ -330,8 +350,11 @@ def _download_stooq(ticker: str, config: DownloadConfig) -> Optional[pd.DataFram
     Stooq provides free data for many tickers when Alpha Vantage and yfinance fail.
     Requires pandas_datareader to be installed: pip install pandas_datareader>=0.10
 
+    Note: Stooq does not require an API key - it's a free public data source.
+
     Returns None if data is empty or pandas_datareader is not installed.
     """
+    # NOTE: Stooq is a free public data source - no API key required.
     if not HAS_PANDAS_DATAREADER:
         LOGGER.warning("pandas_datareader not installed, cannot use Stooq provider")
         return None

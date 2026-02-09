@@ -1,5 +1,10 @@
 """Utility helpers for shared project functionality."""
 
+from .env import (
+    MissingEnvironmentVariableError,
+    check_env_var,
+    get_env_var,
+)
 from .paths import (
     DATA_DIR,
     FIGURES_DIR,
@@ -20,4 +25,7 @@ __all__ = [
     "REPORTS_DIR",
     "FIGURES_DIR",
     "ensure_directories",
+    "get_env_var",
+    "check_env_var",
+    "MissingEnvironmentVariableError",
 ]
