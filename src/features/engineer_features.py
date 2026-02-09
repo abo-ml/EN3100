@@ -253,17 +253,17 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
         # Advanced pattern recognition features (wrapped for graceful degradation)
         try:
             group["liquidity_grab"] = flag_liquidity_grab(group)
-        except Exception:
+        except (KeyError, ValueError, TypeError, AttributeError):
             group["liquidity_grab"] = pd.Series(0, index=group.index)
 
         try:
             group["fvg"] = detect_fvg(group)
-        except Exception:
+        except (KeyError, ValueError, TypeError, AttributeError):
             group["fvg"] = pd.Series(0, index=group.index)
 
         try:
             group["asia_breakout"] = asia_session_range_breakout(group)
-        except Exception:
+        except (KeyError, ValueError, TypeError, AttributeError):
             group["asia_breakout"] = pd.Series(0, index=group.index)
 
         group["realised_vol_bucket"] = realised_volatility_bucket(group["volatility_21"].bfill())

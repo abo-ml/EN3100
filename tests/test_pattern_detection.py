@@ -200,14 +200,15 @@ class TestAdvancedPatternFunctions:
         from src.advanced.pattern_recognition import flag_liquidity_grab
 
         # Create data with a clear liquidity grab pattern:
-        # - Large volume spike (10x normal)
-        # - Close near high after touching low (bullish reversal)
-        # - Significant price change
+        # - Large volume spike (10x normal) at index 4
+        # - Bullish reversal: close at 104.5 is near high of 105, showing wick-based
+        #   reversal where price touched low (98) but closed near high
+        # - Significant price change from prior close (99.5 -> 104.5 = ~5%)
         df = pd.DataFrame({
             "high": [100, 100, 100, 100, 105, 105],
             "low": [99, 99, 99, 99, 98, 99],
-            "close": [99.5, 99.5, 99.5, 99.5, 104.5, 104],  # Close near high
-            "volume": [1000, 1000, 1000, 1000, 10000, 1000],  # Volume spike
+            "close": [99.5, 99.5, 99.5, 99.5, 104.5, 104],  # Index 4: close near high (bullish reversal)
+            "volume": [1000, 1000, 1000, 1000, 10000, 1000],  # Index 4: 10x volume spike
         })
         result = flag_liquidity_grab(df, volume_threshold=2.0, reversal_threshold=0.005)
 
@@ -371,11 +372,26 @@ class TestAdvancedPatternFunctions:
             "high": [100, 101, 102],
             "low": [99, 100, 101],
             "close": [99.5, 100.5, 101.5],
-        }, index=["a", "b", "c"])  # Non-datetime index
+        }, index=["a", "b", "c"])  # String index cannot be converted to datetime
         result = asia_session_range_breakout(df)
 
         assert isinstance(result, pd.Series)
         assert (result == 0).all()
+
+    def test_asia_session_breakout_handles_numeric_index(self):
+        """Test graceful handling when index is numeric (cannot convert to datetime)."""
+        from src.advanced.pattern_recognition import asia_session_range_breakout
+
+        df = pd.DataFrame({
+            "high": [100, 101, 102],
+            "low": [99, 100, 101],
+            "close": [99.5, 100.5, 101.5],
+        }, index=[0, 1, 2])  # Numeric index - will be treated as daily data when converted
+        result = asia_session_range_breakout(df)
+
+        # Numeric indices get converted to dates (epoch timestamps) - function should handle gracefully
+        assert isinstance(result, pd.Series)
+        assert len(result) == len(df)
 
     def test_pattern_functions_graceful_fallback(self):
         """Test that engineer_features handles NotImplementedError gracefully."""
