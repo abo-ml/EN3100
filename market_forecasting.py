@@ -644,7 +644,7 @@ def run_random_forest_iteration(
         y_test = test_df[target_cols]
 
         for params in ParameterGrid(param_grid):
-            model = RandomForestRegressor(random_state=42, n_jobs=-1, **params)
+            model = RandomForestRegressor(random_state=42, n_jobs=1, **params)
             model.fit(X_train, y_train)
             preds = model.predict(X_test)
             score = mean_squared_error(y_test.values, preds)
