@@ -538,7 +538,7 @@ LSTM and Transformer models use Bayesian optimization via Optuna with literature
 | `num_heads` | [2, 4, 8] | Attention heads |
 | `d_model` | [32, 64, 128] | Model dimension |
 | `ff_dim` | [64, 128, 256] | Feed-forward dim |
-| `dropout_rate` | 0.0-0.5 | Regularization |
+| `dropout_rate` | 0.0-0.5 | Regularisation |
 
 Run tuning: `python -m src.experiments.deep_learning_tuning --n-trials 50`
 
@@ -547,10 +547,10 @@ See `docs/EXPERIMENTS.md` for detailed tuning documentation.
 #### Iteration 5 – Meta-Ensemble Improvements
 
 **L1-Penalized Logistic Regression Tuning:**
-The meta-ensemble now includes a `tune_meta_logistic` function with cross-validated regularization tuning:
+The meta-ensemble now includes a `tune_meta_logistic` function with cross-validated regularisation tuning:
 | Parameter | Search Grid | Description |
 |-----------|-------------|-------------|
-| `C` | [0.001, 0.01, 0.1, 1.0, 10.0] | Inverse regularization strength (log scale) |
+| `C` | [0.001, 0.01, 0.1, 1.0, 10.0] | Inverse regularisation strength (smaller = stronger penalty) |
 | `penalty` | L1 (via `l1_ratio=1.0`) | Sparse feature selection |
 | `class_weight` | "balanced" | Handles imbalanced return distributions |
 | `solver` | SAGA | Supports L1 penalty |
