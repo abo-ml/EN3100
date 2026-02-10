@@ -27,7 +27,7 @@ import pandas as pd
 import yfinance as yf
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.model_selection import ParameterGrid
+from sklearn.model_selection import GridSearchCV, ParameterGrid
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestRegressor
 from tensorflow import keras
@@ -627,38 +627,78 @@ def run_random_forest_iteration(
     target_cols: Sequence[str],
     splits: Sequence[Tuple[pd.DataFrame, pd.DataFrame]],
     param_grid: Optional[Dict[str, Iterable]] = None,
+    cv: int = 3,
 ) -> Dict[str, List[Dict[str, float]]]:
-    """Evaluate a RandomForestRegressor with a small grid search."""
+    """Evaluate a RandomForestRegressor using grid search cross-validation.
 
-    param_grid = param_grid or {"n_estimators": [100], "max_depth": [5, 10, None]}
+    This expanded tuning plan explores a comprehensive hyperparameter space
+    based on a study suggesting grid search cross-validation with:
+    - max_depth: {2, 4, 6, 8, 10} for controlling tree complexity
+    - n_estimators: {64, 128, 256} for ensemble size
+    - max_features: {'sqrt', 'log2', 0.8} for feature selection at each split
+    - min_samples_leaf: {1, 2, 3, 4, 5} for regularization
+
+    Parameters
+    ----------
+    data:
+        DataFrame with features and targets.
+    feature_cols:
+        Column names for features.
+    target_cols:
+        Column names for targets.
+    splits:
+        List of (train_df, test_df) tuples from walk-forward validation.
+    param_grid:
+        Optional custom parameter grid. If None, uses the expanded default grid.
+    cv:
+        Number of cross-validation folds (default: 3).
+
+    Returns
+    -------
+    dict:
+        Mapping of target column names to lists of metrics per split.
+    """
+
+    if param_grid is None:
+        param_grid = {
+            "n_estimators": [64, 128, 256],
+            "max_depth": [2, 4, 6, 8, 10],
+            "max_features": ["sqrt", "log2", 0.8],
+            "min_samples_leaf": [1, 2, 3, 4, 5],
+        }
 
     results: Dict[str, List[Dict[str, float]]] = {target: [] for target in target_cols}
 
     for split_idx, (train_df, test_df) in enumerate(splits, start=1):
-        best_model: Optional[RandomForestRegressor] = None
-        best_score = float("inf")
-
         X_train = train_df[feature_cols]
         X_test = test_df[feature_cols]
         y_train = train_df[target_cols]
         y_test = test_df[target_cols]
 
-        for params in ParameterGrid(param_grid):
-            model = RandomForestRegressor(random_state=42, n_jobs=-1, **params)
-            model.fit(X_train, y_train)
-            preds = model.predict(X_test)
-            score = mean_squared_error(y_test.values, preds)
-            if score < best_score:
-                best_score = score
-                best_model = model
+        base_model = RandomForestRegressor(random_state=42, n_jobs=-1)
+        grid_search = GridSearchCV(
+            estimator=base_model,
+            param_grid=param_grid,
+            cv=cv,
+            scoring="neg_mean_squared_error",
+            n_jobs=-1,
+            refit=True,
+        )
+        grid_search.fit(X_train, y_train)
 
-        assert best_model is not None
+        best_model = grid_search.best_estimator_
         best_preds = best_model.predict(X_test)
 
         for i, target in enumerate(target_cols):
             metrics = evaluate_predictions(y_test.iloc[:, i].values, best_preds[:, i])
             results[target].append(metrics)
-        logger.info("Random Forest split %d complete with params %s.", split_idx, best_model.get_params())
+
+        logger.info(
+            "Random Forest split %d complete with best params: %s (CV score: %.4f)",
+            split_idx,
+            grid_search.best_params_,
+            -grid_search.best_score_,
+        )
 
     print_iteration_results("Iteration 2 – Random Forest", results)
     return results
