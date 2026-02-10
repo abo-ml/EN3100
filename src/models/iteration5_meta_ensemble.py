@@ -109,13 +109,11 @@ def run_iteration(
         test_volatility_raw = test["volatility_21"].copy()
 
         # Cast boolean feature columns to float to avoid dtype conflicts during scaling
-        for col in features:
-            if inner_train[col].dtype == bool:
-                inner_train[col] = inner_train[col].astype(float)
-            if meta_train[col].dtype == bool:
-                meta_train[col] = meta_train[col].astype(float)
-            if test[col].dtype == bool:
-                test[col] = test[col].astype(float)
+        bool_cols = [col for col in features if inner_train[col].dtype == bool]
+        for col in bool_cols:
+            inner_train[col] = inner_train[col].astype(float)
+            meta_train[col] = meta_train[col].astype(float)
+            test[col] = test[col].astype(float)
 
         scaler = StandardScaler()
         inner_train[features] = scaler.fit_transform(inner_train[features])
@@ -202,12 +200,11 @@ def run_iteration(
             # All targets are the same class; skip fitting and use constant probability
             constant_prob = float(y_bin.iloc[0])  # 0.0 or 1.0
             class_probs = np.full(len(test_df), constant_prob)
-            class_pred = (class_probs > 0.5).astype(int)
         else:
             meta_clf = LogisticRegression(max_iter=500)
             meta_clf.fit(meta_df[feature_cols], y_bin)
             class_probs = meta_clf.predict_proba(test_df[feature_cols])[:, 1]
-            class_pred = (class_probs > 0.5).astype(int)
+        class_pred = (class_probs > 0.5).astype(int)
 
         meta_pred = meta_reg.predict(test_df[feature_cols])
 
