@@ -10,6 +10,7 @@ import pandas as pd
 import tensorflow as tf
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge
+from sklearn.model_selection import ParameterGrid, StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 
 from src.evaluation.metrics import directional_accuracy, mae, max_drawdown, r2, rmse, sharpe_ratio
@@ -78,6 +79,79 @@ def pairs_spread_signal(asset_a: pd.Series, asset_b: pd.Series) -> float:
     spread = asset_a - asset_b
     z_score = (spread - spread.mean()) / spread.std(ddof=1)
     return float(z_score.iloc[-1])
+
+
+def tune_meta_logistic(
+    X: np.ndarray,
+    y: np.ndarray,
+    n_folds: int = 3,
+) -> Dict[str, object]:
+    """Tune L1-penalised logistic regression via stratified cross-validation.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        Feature matrix (meta-features from level 1 models).
+    y : np.ndarray
+        Binary target (1 = positive return, 0 = non-positive).
+    n_folds : int
+        Number of stratified CV folds.
+
+    Returns
+    -------
+    dict
+        Best hyperparameters including C, l1_ratio, solver, and class_weight.
+    """
+    # C values on a log scale from 0.001 to 10
+    c_values = [0.001, 0.01, 0.1, 1.0, 10.0]
+    grid = ParameterGrid({"C": c_values})
+
+    best_params: Dict[str, object] = {}
+    best_score = -np.inf
+
+    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=SEED)
+
+    for params in grid:
+        fold_scores = []
+        for train_idx, val_idx in skf.split(X, y):
+            X_train, X_val = X[train_idx], X[val_idx]
+            y_train, y_val = y[train_idx], y[val_idx]
+
+            model = LogisticRegression(
+                solver="saga",
+                l1_ratio=1.0,  # L1 penalty (l1_ratio=1 is pure L1)
+                max_iter=1000,
+                class_weight="balanced",
+                random_state=SEED,
+                **params,
+            )
+            model.fit(X_train, y_train)
+            y_pred = model.predict(X_val)
+            # Use balanced accuracy for imbalanced class handling
+            # Balanced accuracy = (recall_class0 + recall_class1) / 2
+            tp = np.sum((y_pred == 1) & (y_val == 1))
+            tn = np.sum((y_pred == 0) & (y_val == 0))
+            p = np.sum(y_val == 1)
+            n = np.sum(y_val == 0)
+            recall_pos = tp / p if p > 0 else 0.0
+            recall_neg = tn / n if n > 0 else 0.0
+            balanced_acc = (recall_pos + recall_neg) / 2
+            fold_scores.append(balanced_acc)
+
+        mean_score = np.mean(fold_scores)
+        if mean_score > best_score:
+            best_score = mean_score
+            best_params = {
+                "C": params["C"],
+                "l1_ratio": 1.0,
+                "solver": "saga",
+                "max_iter": 1000,
+                "class_weight": "balanced",
+                "random_state": SEED,
+            }
+
+    LOGGER.info("Best meta-logistic params: C=%.4f with CV balanced accuracy %.4f", best_params.get("C", 1.0), best_score)
+    return best_params
 
 
 def run_iteration(
