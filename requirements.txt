@@ -22,5 +22,5 @@ stable-baselines3>=2.0.0  # PPO, A2C and other RL algorithms
 requests>=2.28.0  # For broker API integration (Alpaca, Binance)
 # Optional data provider fallback (Stooq)
 pandas_datareader>=0.10  # For Stooq fallback when Alpha Vantage and yfinance fail
-# Optional hyperparameter tuning (Bayesian optimization)
-# scikit-optimize>=0.9  # For Bayesian optimization in XGBoost tuning (optional)
+# Hyperparameter optimization
+optuna>=3.5.0  # Bayesian optimization for deep learning model tuning
