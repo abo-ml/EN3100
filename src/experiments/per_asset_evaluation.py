@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import logging
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -186,6 +187,7 @@ def main(cmd_args: Optional[List[str]] = None) -> None:
     records: List[Dict[str, object]] = []
     for ticker in ns.tickers:
         records.extend(evaluate_ticker(ticker, feature_df))
+        gc.collect()
 
     if not records:
         raise RuntimeError("No metrics computed; check input data.")

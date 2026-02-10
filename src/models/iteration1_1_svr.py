@@ -45,9 +45,9 @@ def tune_svr(train_df: pd.DataFrame, features: List[str]) -> Dict[str, float]:
 
     grid = ParameterGrid(
         {
-            "C": [1, 10, 100],
-            "epsilon": [0.001, 0.01, 0.1],
-            "gamma": ["scale", 0.01, 0.1],
+            "C": [0.1, 1, 10, 100],
+            "epsilon": [0.001, 0.01, 0.05],
+            "gamma": [0.001, 0.01, 0.1, 1],
         }
     )
     best_params: Dict[str, float] | None = None

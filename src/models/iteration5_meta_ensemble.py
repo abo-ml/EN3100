@@ -194,19 +194,29 @@ def run_iteration(
         meta_reg = Ridge(alpha=1.0)
         meta_reg.fit(meta_df[feature_cols], meta_df["target"])
 
-        # Check for single-class scenario before fitting LogisticRegression
-        y_bin = (meta_df["target"] > 0).astype(int)
-        if y_bin.nunique() < 2:
-            # All targets are the same class; skip fitting and use constant probability
-            constant_prob = float(y_bin.iloc[0])  # 0.0 or 1.0
-            class_probs = np.full(len(test_df), constant_prob)
+        y = (meta_df["target"] > 0).astype(int)
+        n_classes = y.nunique()
+
+        meta_clf = None
+        constant_class = None
+
+        if n_classes < 2:
+            # Edge case: only one class present -> cannot train logistic regression
+            constant_class = int(y.iloc[0])  # 0 or 1
         else:
-            meta_clf = LogisticRegression(max_iter=500)
-            meta_clf.fit(meta_df[feature_cols], y_bin)
-            class_probs = meta_clf.predict_proba(test_df[feature_cols])[:, 1]
-        class_pred = (class_probs > 0.5).astype(int)
+            meta_clf = LogisticRegression(max_iter=2000, solver="lbfgs")
+            meta_clf.fit(meta_df[feature_cols], y)
 
         meta_pred = meta_reg.predict(test_df[feature_cols])
+
+        # Handle prediction with fallback for single-class case
+        if meta_clf is None:
+            # constant probability of "up"
+            class_probs = np.full(len(test_df), 1.0 if constant_class == 1 else 0.0)
+        else:
+            class_probs = meta_clf.predict_proba(test_df[feature_cols])[:, 1]
+
+        class_pred = (class_probs > 0.5).astype(int)
 
         # Attach outcomes for evaluation
         test_df["pred_return"] = meta_pred
