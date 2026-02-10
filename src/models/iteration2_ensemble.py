@@ -53,7 +53,7 @@ def fit_xgb(X_train, y_train, tune: bool = True, tuning_method: str = "grid"):
     """Fit XGBoost model with optional hyperparameter tuning.
 
     This function addresses XGBoost underperformance by implementing per-window
-    hyperparameter tuning. Research emphasises that optimal hyperparameters change
+    hyperparameter tuning. Research emphasizes that optimal hyperparameters change
     across rebalancing windows, making this re-tuning essential for good performance.
 
     Parameters

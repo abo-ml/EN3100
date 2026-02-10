@@ -1,7 +1,7 @@
 """XGBoost hyperparameter tuning with grid search and optional Bayesian optimization.
 
 This module implements a tuning procedure for XGBoost that addresses the underperformance
-observed in the base model (RMSE 0.0131, R² < 0). Research emphasises that optimal
+observed in the base model (RMSE 0.0131, R² < 0). Research emphasizes that optimal
 hyperparameters change across rebalancing windows, requiring per-window re-tuning.
 
 The tuning covers:
@@ -324,16 +324,14 @@ def tune_xgboost(
     if method == "bayesian":
         if SKOPT_AVAILABLE:
             return tune_xgboost_bayesian(X_train, y_train, config)
-        else:
-            LOGGER.warning(
-                "scikit-optimize not available; falling back to grid search. "
-                "Install with: pip install scikit-optimize"
-            )
-            return tune_xgboost_grid(X_train, y_train, config)
-    elif method == "grid":
+        LOGGER.warning(
+            "scikit-optimize not available; falling back to grid search. "
+            "Install with: pip install scikit-optimize"
+        )
         return tune_xgboost_grid(X_train, y_train, config)
-    else:
-        raise ValueError(f"Unknown tuning method: {method}. Use 'grid' or 'bayesian'.")
+    if method == "grid":
+        return tune_xgboost_grid(X_train, y_train, config)
+    raise ValueError(f"Unknown tuning method: {method}. Use 'grid' or 'bayesian'.")
 
 
 def fit_tuned_xgboost(
