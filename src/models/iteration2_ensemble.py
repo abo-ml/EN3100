@@ -24,6 +24,12 @@ try:  # pragma: no cover - optional dependency
 except ImportError:  # pragma: no cover
     XGBRegressor = None
 
+from src.models.xgboost_tuning import (
+    XGBoostTuningConfig,
+    fit_tuned_xgboost,
+    get_reduced_grid_config,
+)
+
 REPORT_PATH = REPORTS_DIR / "iteration_2_results.md"
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level="INFO")
@@ -43,10 +49,41 @@ def tune_random_forest(X_train, y_train) -> RandomForestRegressor:
     return best_model
 
 
-def fit_xgb(X_train, y_train):
+def fit_xgb(X_train, y_train, tune: bool = True, tuning_method: str = "grid"):
+    """Fit XGBoost model with optional hyperparameter tuning.
+
+    This function addresses XGBoost underperformance by implementing per-window
+    hyperparameter tuning. Research emphasises that optimal hyperparameters change
+    across rebalancing windows, making this re-tuning essential for good performance.
+
+    Parameters
+    ----------
+    X_train : array-like
+        Training features (already scaled).
+    y_train : array-like
+        Training target values.
+    tune : bool, optional
+        If True, performs hyperparameter tuning. If False, uses default params.
+        Defaults to True.
+    tuning_method : str, optional
+        Tuning method: "grid" for grid search, "bayesian" for Bayesian optimization.
+        Defaults to "grid".
+
+    Returns
+    -------
+    XGBRegressor or None
+        Fitted model, or None if XGBoost is not installed.
+    """
     if XGBRegressor is None:
         LOGGER.warning("XGBoost not installed; skipping")
         return None
+
+    if tune:
+        # Use reduced grid for efficiency in walk-forward validation
+        config = get_reduced_grid_config()
+        return fit_tuned_xgboost(X_train, y_train, method=tuning_method, config=config)
+
+    # Fall back to default parameters (original behavior)
     model = XGBRegressor(
         n_estimators=300,
         learning_rate=0.05,
