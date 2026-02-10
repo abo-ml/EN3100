@@ -58,6 +58,37 @@ def load_tuning_config(config_path: Optional[Path] = None) -> Dict[str, Any]:
         return yaml.safe_load(f)
 
 
+def get_config_range(
+    config: Dict[str, Any],
+    key: str,
+    min_default: float,
+    max_default: float,
+) -> Tuple[float, float]:
+    """Extract min/max range from nested config with defaults.
+    
+    Parameters
+    ----------
+    config : Dict[str, Any]
+        Configuration dictionary.
+    key : str
+        Key to look up in config.
+    min_default : float
+        Default minimum value if not found.
+    max_default : float
+        Default maximum value if not found.
+    
+    Returns
+    -------
+    Tuple[float, float]
+        (min_value, max_value) tuple.
+    """
+    param_config = config.get(key, {})
+    return (
+        param_config.get("min", min_default),
+        param_config.get("max", max_default),
+    )
+
+
 def create_sequences(
     df: pd.DataFrame, features: List[str], target_col: str, window: int
 ) -> Tuple[np.ndarray, np.ndarray]:
@@ -231,18 +262,12 @@ def lstm_objective(trial: Trial, df: pd.DataFrame, config: Dict[str, Any]) -> fl
     lstm_config = config.get("lstm", {})
     tuning_config = config.get("tuning", {})
     
-    n_layers = trial.suggest_int(
-        "n_layers",
-        lstm_config.get("n_layers", {}).get("min", 1),
-        lstm_config.get("n_layers", {}).get("max", 3),
-    )
+    n_layers_min, n_layers_max = get_config_range(lstm_config, "n_layers", 1, 3)
+    n_layers = trial.suggest_int("n_layers", int(n_layers_min), int(n_layers_max))
     
+    units_min, units_max = get_config_range(lstm_config, "units_per_layer", 32, 150)
     units_per_layer = [
-        trial.suggest_int(
-            f"units_layer_{i}",
-            lstm_config.get("units_per_layer", {}).get("min", 32),
-            lstm_config.get("units_per_layer", {}).get("max", 150),
-        )
+        trial.suggest_int(f"units_layer_{i}", int(units_min), int(units_max))
         for i in range(n_layers)
     ]
     
@@ -254,11 +279,8 @@ def lstm_objective(trial: Trial, df: pd.DataFrame, config: Dict[str, Any]) -> fl
         step=seq_len_config.get("step", 10),
     )
     
-    dropout_rate = trial.suggest_float(
-        "dropout_rate",
-        lstm_config.get("dropout_rate", {}).get("min", 0.0),
-        lstm_config.get("dropout_rate", {}).get("max", 0.5),
-    )
+    dropout_min, dropout_max = get_config_range(lstm_config, "dropout_rate", 0.0, 0.5)
+    dropout_rate = trial.suggest_float("dropout_rate", dropout_min, dropout_max)
     
     lr_config = lstm_config.get("learning_rate", {})
     learning_rate = trial.suggest_float(
@@ -271,12 +293,8 @@ def lstm_objective(trial: Trial, df: pd.DataFrame, config: Dict[str, Any]) -> fl
     batch_choices = lstm_config.get("batch_size", {}).get("choices", [32, 64, 128])
     batch_size = trial.suggest_categorical("batch_size", batch_choices)
     
-    l2_config = lstm_config.get("l2_regularization", {})
-    l2_reg = trial.suggest_float(
-        "l2_reg",
-        l2_config.get("min", 0.0),
-        l2_config.get("max", 0.01),
-    )
+    l2_min, l2_max = get_config_range(lstm_config, "l2_regularization", 0.0, 0.01)
+    l2_reg = trial.suggest_float("l2_reg", l2_min, l2_max)
     
     features = feature_columns(df)
     n_splits = tuning_config.get("n_splits", 3)
@@ -346,11 +364,8 @@ def transformer_objective(trial: Trial, df: pd.DataFrame, config: Dict[str, Any]
     transformer_config = config.get("transformer", {})
     tuning_config = config.get("tuning", {})
     
-    num_layers = trial.suggest_int(
-        "num_layers",
-        transformer_config.get("num_layers", {}).get("min", 1),
-        transformer_config.get("num_layers", {}).get("max", 3),
-    )
+    num_layers_min, num_layers_max = get_config_range(transformer_config, "num_layers", 1, 3)
+    num_layers = trial.suggest_int("num_layers", int(num_layers_min), int(num_layers_max))
     
     num_heads_choices = transformer_config.get("num_heads", {}).get("choices", [2, 4, 8])
     num_heads = trial.suggest_categorical("num_heads", num_heads_choices)
@@ -369,11 +384,8 @@ def transformer_objective(trial: Trial, df: pd.DataFrame, config: Dict[str, Any]
         step=seq_len_config.get("step", 10),
     )
     
-    dropout_rate = trial.suggest_float(
-        "dropout_rate",
-        transformer_config.get("dropout_rate", {}).get("min", 0.0),
-        transformer_config.get("dropout_rate", {}).get("max", 0.5),
-    )
+    dropout_min, dropout_max = get_config_range(transformer_config, "dropout_rate", 0.0, 0.5)
+    dropout_rate = trial.suggest_float("dropout_rate", dropout_min, dropout_max)
     
     lr_config = transformer_config.get("learning_rate", {})
     learning_rate = trial.suggest_float(
