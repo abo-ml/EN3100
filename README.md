@@ -405,6 +405,15 @@ python -m src.experiments.evaluate_20_stock_all_iterations
 ```
 This produces summary statistics, pivot tables, and iteration comparisons for the equity universe.
 
+### Memory Optimizations for Large Universe Evaluation
+The 20-stock evaluation includes memory optimizations to reduce peak RAM consumption:
+
+- **Explicit garbage collection:** `gc.collect()` is called after each ticker completes to release intermediate data structures
+- **float32 feature matrices:** Float64 columns are cast to float32 after feature engineering (~50% memory reduction for numeric data)
+- **Single-threaded sklearn models:** `n_jobs=1` for RandomForestRegressor prevents thread memory spikes (trades computation time for memory stability)
+
+These optimizations allow the full 20-stock evaluation to run on machines with limited RAM.
+
 ## Config-driven runner (application layer)
 Use the lightweight runner to drive the same pipelines from a config file:
 ```bash
@@ -450,22 +459,63 @@ bash scripts/smoke_check.sh
 The SVR model uses an RBF kernel with grid-search hyperparameter tuning on a validation tail (20% of training data):
 | Parameter | Search Grid | Description |
 |-----------|-------------|-------------|
-| `C` | [1, 10, 100] | Regularisation parameter |
-| `epsilon` | [0.001, 0.01, 0.1] | Epsilon-tube width |
-| `gamma` | ["scale", 0.01, 0.1] | RBF kernel coefficient |
+| `C` | [0.1, 1, 10, 100] | Regularisation parameter (expanded to include lower bound) |
+| `epsilon` | [0.001, 0.01, 0.05] | Epsilon-tube width (narrower range) |
+| `gamma` | [0.001, 0.01, 0.1, 1] | RBF kernel coefficient (explicit numeric values) |
 
-Selection criterion: lowest RMSE on the validation set.
+Grid expands from 27 to 48 combinations for systematic exploration. Selection criterion: lowest RMSE on the validation set.
 
-#### Iteration 2.1 – LightGBM Tuning
-LightGBM uses gradient boosting with grid-search over:
+#### Iteration 2 – Random Forest Tuning
+Random Forest uses sklearn's `GridSearchCV` with 3-fold cross-validation for systematic hyperparameter search:
 | Parameter | Search Grid | Description |
 |-----------|-------------|-------------|
-| `num_leaves` | [15, 31, 63] | Maximum leaves per tree |
-| `max_depth` | [-1, 6, 10] | Tree depth limit (-1 = no limit) |
-| `learning_rate` | [0.01, 0.05, 0.1] | Boosting learning rate |
-| `n_estimators` | [200, 500, 800] | Number of boosting rounds |
+| `n_estimators` | [64, 128, 256] | Number of trees |
+| `max_depth` | [2, 4, 6, 8, 10] | Maximum tree depth |
+| `max_features` | ["sqrt", "log2", 0.8] | Features per split |
+| `min_samples_leaf` | [1, 2, 3, 4, 5] | Minimum samples per leaf |
 
-Base parameters: `objective="regression"`, `subsample=0.8`, `colsample_bytree=0.8`, `random_state=42`.
+Grid contains 225 combinations. Scoring uses `neg_mean_squared_error` with parallel execution (`n_jobs=-1`). Best parameters and CV scores are logged on completion.
+
+#### Iteration 2.1 – LightGBM Tuning
+LightGBM uses gradient boosting with the dedicated tuning module `src/models/lightgbm_tuning.py`:
+| Parameter | Search Grid | Description |
+|-----------|-------------|-------------|
+| `learning_rate` | 0.01-0.1 | Boosting learning rate |
+| `num_leaves` | 31-255 | Maximum leaves per tree |
+| `max_depth` | 3-10 | Tree depth limit |
+| `min_data_in_leaf` | 20-100 | Minimum samples per leaf |
+| `feature_fraction` | 0.6-1.0 | Feature sampling ratio |
+
+The module enforces `num_leaves < 2^max_depth` per literature guidance, uses time-series walk-forward CV, and samples ~50 random combinations from ~5k valid parameter sets for practical runtime. Run tuning with:
+```bash
+python -c "from src.models.lightgbm_tuning import run_tuning; run_tuning()"
+```
+
+#### Iteration 2 – XGBoost Per-Window Tuning
+XGBoost uses per-window hyperparameter tuning via `src/models/xgboost_tuning.py` to adapt to parameter drift across walk-forward splits:
+| Parameter | Search Range | Description |
+|-----------|--------------|-------------|
+| `learning_rate` | 0.01-0.1 | Boosting learning rate |
+| `max_depth` | 3-8 | Maximum tree depth |
+| `subsample` | 0.5-1.0 | Row sampling ratio |
+| `colsample_bytree` | 0.5-1.0 | Column sampling ratio |
+| `gamma` | 0-1 | Minimum loss reduction |
+| `reg_lambda` | 1-10 | L2 regularisation |
+| `reg_alpha` | 0-1 | L1 regularisation |
+
+The module supports grid search (default) and optional Bayesian optimization via scikit-optimize. Chronological train/validation splits avoid lookahead bias.
+```python
+from src.models.iteration2_ensemble import fit_xgb
+
+# Per-window tuning (default)
+model = fit_xgb(X_train, y_train)
+
+# Static params (original behavior)
+model = fit_xgb(X_train, y_train, tune=False)
+
+# Bayesian optimization (requires scikit-optimize)
+model = fit_xgb(X_train, y_train, tuning_method="bayesian")
+```
 
 #### Iteration 3 & 4 – Deep Learning Tuning (LSTM/Transformer)
 LSTM and Transformer models use Bayesian optimization via Optuna with literature-based search spaces:
@@ -493,6 +543,24 @@ LSTM and Transformer models use Bayesian optimization via Optuna with literature
 Run tuning: `python -m src.experiments.deep_learning_tuning --n-trials 50`
 
 See `docs/EXPERIMENTS.md` for detailed tuning documentation.
+
+#### Iteration 5 – Meta-Ensemble Improvements
+
+**L1-Penalized Logistic Regression Tuning:**
+The meta-ensemble now includes a `tune_meta_logistic` function with cross-validated regularization tuning:
+| Parameter | Search Grid | Description |
+|-----------|-------------|-------------|
+| `C` | [0.001, 0.01, 0.1, 1.0, 10.0] | Inverse regularization strength (log scale) |
+| `penalty` | L1 (via `l1_ratio=1.0`) | Sparse feature selection |
+| `class_weight` | "balanced" | Handles imbalanced return distributions |
+| `solver` | SAGA | Supports L1 penalty |
+
+Cross-validation uses `StratifiedKFold` (k=3) with balanced accuracy as the tuning metric.
+
+**Robustness Improvements:**
+- **Single-class guard:** When a walk-forward split contains only one target class, the meta-ensemble falls back to constant probability prediction instead of crashing
+- **Boolean dtype handling:** Boolean feature columns are automatically cast to float before StandardScaler transformation to prevent dtype conflicts
+- **Failed iteration handling:** Evaluation loops wrap runner calls with try-except to log failures without crashing the entire 20-stock run
 
 ## Validation & Fairness Across Market Regimes
 Robustness is evaluated via chronological walk-forward validation across all assets. Metrics are aggregated within each split to inspect performance under varying volatility regimes, drawdowns, and market conditions. The `engineer_features.py` module labels regimes (e.g., high/low volatility buckets, risk-off periods) enabling analysis of whether models degrade during stress events. Future work should further stratify results by asset class, liquidity profiles, and macroeconomic cycles to avoid regime overfitting.
