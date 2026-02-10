@@ -445,7 +445,19 @@ def evaluate_ticker(ticker: str, df: pd.DataFrame) -> List[Dict[str, object]]:
 
     records: List[Dict[str, object]] = []
     for iteration_id, iteration_label, runner, mapping in ITERATION_CONFIGS:
-        metrics_df, _ = runner(data=ticker_df, generate_reports=False, ticker=ticker)
+        try:
+            metrics_df, _ = runner(data=ticker_df, generate_reports=False, ticker=ticker)
+        except (ValueError, RuntimeError) as e:
+            LOGGER.warning("Iteration %s failed for %s: %s", iteration_id, ticker, e)
+            records.append(
+                {
+                    "ticker": ticker,
+                    "iteration": iteration_id,
+                    "status": "failed",
+                    "error": str(e),
+                }
+            )
+            continue
         summary = aggregate_metrics(metrics_df.to_dict("records"))
         metrics = extract_metrics(summary, mapping)
         if all(value is None for value in metrics.values()):
