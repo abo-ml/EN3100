@@ -182,6 +182,13 @@ def run_iteration(
         # Preserve unscaled volatility for risk sizing before we standardise features.
         test_volatility_raw = test["volatility_21"].copy()
 
+        # Cast boolean feature columns to float to avoid dtype conflicts during scaling
+        bool_cols = [col for col in features if inner_train[col].dtype == bool]
+        for col in bool_cols:
+            inner_train[col] = inner_train[col].astype(float)
+            meta_train[col] = meta_train[col].astype(float)
+            test[col] = test[col].astype(float)
+
         scaler = StandardScaler()
         inner_train[features] = scaler.fit_transform(inner_train[features])
         meta_train[features] = scaler.transform(meta_train[features])
