@@ -1,0 +1,106 @@
+# Deep Learning Hyperparameter Tuning Configuration
+# Literature-based optimal ranges for LSTM and Transformer models
+# Reference: Bayesian optimization and genetic algorithm studies for stock forecasting
+
+tuning:
+  # Number of optimization trials per model
+  n_trials: 50
+  
+  # Optimization metric (minimize RMSE for regression)
+  metric: "rmse"
+  direction: "minimize"
+  
+  # Cross-validation settings
+  n_splits: 3
+  train_min_period: 252  # 1 year minimum training data
+
+# LSTM Hyperparameter Search Space
+lstm:
+  # Architecture parameters
+  n_layers:
+    min: 1
+    max: 3
+  units_per_layer:
+    min: 32
+    max: 150
+    # Literature optimal: 96 or 128 neurons
+  
+  # Regularization parameters
+  dropout_rate:
+    min: 0.0
+    max: 0.5
+    # Literature optimal: 0.3-0.4
+  l2_regularization:
+    min: 0.0
+    max: 0.01
+  
+  # Sequence parameters
+  sequence_length:
+    min: 30
+    max: 90
+    step: 10
+  
+  # Training parameters
+  learning_rate:
+    min: 0.0005
+    max: 0.01
+    log: true  # Log-uniform sampling
+  batch_size:
+    choices: [32, 64, 128]
+  epochs:
+    max: 100
+  
+  # Early stopping configuration
+  early_stopping:
+    patience: 10
+    min_delta: 0.0001
+    restore_best_weights: true
+  
+  # Activation function (literature suggests tanh for LSTM gates)
+  activation: "tanh"
+
+# Transformer Hyperparameter Search Space
+transformer:
+  # Architecture parameters
+  num_layers:
+    min: 1
+    max: 3
+  num_heads:
+    choices: [2, 4, 8]
+  d_model:
+    choices: [32, 64, 128]
+  ff_dim:
+    choices: [64, 128, 256]
+  
+  # Regularization parameters
+  dropout_rate:
+    min: 0.0
+    max: 0.5
+  
+  # Sequence parameters
+  sequence_length:
+    min: 30
+    max: 90
+    step: 10
+  
+  # Training parameters
+  learning_rate:
+    min: 0.0005
+    max: 0.01
+    log: true
+  batch_size:
+    choices: [32, 64, 128]
+  epochs:
+    max: 100
+  
+  # Early stopping configuration
+  early_stopping:
+    patience: 10
+    min_delta: 0.0001
+    restore_best_weights: true
+
+# Output paths
+output:
+  results_dir: "reports/tuning"
+  best_params_file: "best_hyperparameters.yaml"
+  study_file: "optuna_study.db"

@@ -467,6 +467,33 @@ LightGBM uses gradient boosting with grid-search over:
 
 Base parameters: `objective="regression"`, `subsample=0.8`, `colsample_bytree=0.8`, `random_state=42`.
 
+#### Iteration 3 & 4 – Deep Learning Tuning (LSTM/Transformer)
+LSTM and Transformer models use Bayesian optimization via Optuna with literature-based search spaces:
+
+**LSTM Search Space:**
+| Parameter | Range | Optimal (Literature) |
+|-----------|-------|---------------------|
+| `n_layers` | 1-3 | 1-2 layers |
+| `units_per_layer` | 32-150 | 96 or 128 neurons |
+| `dropout_rate` | 0.0-0.5 | 0.3-0.4 |
+| `sequence_length` | 30-90 days | Task-dependent |
+| `learning_rate` | 0.0005-0.01 | Log-uniform |
+| `batch_size` | [32, 64, 128] | 32-64 |
+| `l2_reg` | 0.0-0.01 | 0.001 |
+
+**Transformer Search Space:**
+| Parameter | Range | Description |
+|-----------|-------|-------------|
+| `num_layers` | 1-3 | Encoder layers |
+| `num_heads` | [2, 4, 8] | Attention heads |
+| `d_model` | [32, 64, 128] | Model dimension |
+| `ff_dim` | [64, 128, 256] | Feed-forward dim |
+| `dropout_rate` | 0.0-0.5 | Regularization |
+
+Run tuning: `python -m src.experiments.deep_learning_tuning --n-trials 50`
+
+See `docs/EXPERIMENTS.md` for detailed tuning documentation.
+
 ## Validation & Fairness Across Market Regimes
 Robustness is evaluated via chronological walk-forward validation across all assets. Metrics are aggregated within each split to inspect performance under varying volatility regimes, drawdowns, and market conditions. The `engineer_features.py` module labels regimes (e.g., high/low volatility buckets, risk-off periods) enabling analysis of whether models degrade during stress events. Future work should further stratify results by asset class, liquidity profiles, and macroeconomic cycles to avoid regime overfitting.
 
