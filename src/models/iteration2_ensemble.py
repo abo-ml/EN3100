@@ -29,55 +29,18 @@ LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level="INFO")
 
 
-def tune_random_forest(X_train, y_train, cv: int = 3) -> RandomForestRegressor:
-    """Tune RandomForestRegressor using grid search cross-validation.
-
-    This expanded tuning plan explores a comprehensive hyperparameter space
-    based on a study suggesting grid search cross-validation with:
-    - max_depth: {2, 4, 6, 8, 10} for controlling tree complexity
-    - n_estimators: {64, 128, 256} for ensemble size
-    - max_features: {'sqrt', 'log2', 0.8} for feature selection at each split
-    - min_samples_leaf: {1, 2, 3, 4, 5} for regularization
-
-    Parameters
-    ----------
-    X_train : array-like
-        Training feature matrix.
-    y_train : array-like
-        Training target values.
-    cv : int, optional
-        Number of cross-validation folds (default: 3).
-
-    Returns
-    -------
-    RandomForestRegressor
-        Best model found by grid search.
-    """
-    param_grid = {
-        "n_estimators": [64, 128, 256],
-        "max_depth": [2, 4, 6, 8, 10],
-        "max_features": ["sqrt", "log2", 0.8],
-        "min_samples_leaf": [1, 2, 3, 4, 5],
-    }
-
-    base_model = RandomForestRegressor(random_state=42, n_jobs=-1)
-    grid_search = GridSearchCV(
-        estimator=base_model,
-        param_grid=param_grid,
-        cv=cv,
-        scoring="neg_mean_squared_error",
-        n_jobs=-1,
-        refit=True,
-    )
-    grid_search.fit(X_train, y_train)
-
-    LOGGER.info(
-        "Best RandomForest params: %s with CV score: %.4f",
-        grid_search.best_params_,
-        -grid_search.best_score_,
-    )
-
-    return grid_search.best_estimator_
+def tune_random_forest(X_train, y_train) -> RandomForestRegressor:
+    grid = ParameterGrid({"n_estimators": [100, 200], "max_depth": [5, 10], "min_samples_leaf": [2, 4]})
+    best_score = -np.inf
+    best_model = None
+    for params in grid:
+        model = RandomForestRegressor(random_state=42, n_jobs=1, **params)
+        model.fit(X_train, y_train)
+        score = model.score(X_train, y_train)
+        if score > best_score:
+            best_score = score
+            best_model = model
+    return best_model
 
 
 def fit_xgb(X_train, y_train):

@@ -675,16 +675,14 @@ def run_random_forest_iteration(
         y_train = train_df[target_cols]
         y_test = test_df[target_cols]
 
-        base_model = RandomForestRegressor(random_state=42, n_jobs=-1)
-        grid_search = GridSearchCV(
-            estimator=base_model,
-            param_grid=param_grid,
-            cv=cv,
-            scoring="neg_mean_squared_error",
-            n_jobs=-1,
-            refit=True,
-        )
-        grid_search.fit(X_train, y_train)
+        for params in ParameterGrid(param_grid):
+            model = RandomForestRegressor(random_state=42, n_jobs=1, **params)
+            model.fit(X_train, y_train)
+            preds = model.predict(X_test)
+            score = mean_squared_error(y_test.values, preds)
+            if score < best_score:
+                best_score = score
+                best_model = model
 
         best_model = grid_search.best_estimator_
         best_preds = best_model.predict(X_test)

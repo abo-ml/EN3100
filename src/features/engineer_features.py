@@ -294,6 +294,11 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
 
     targets = compute_targets(features)
     full_df = features.merge(targets, on=["ticker", "date"], how="inner")
+
+    # Cast numeric columns to float32 to reduce memory footprint
+    float_cols = full_df.select_dtypes(include=["float64"]).columns
+    full_df[float_cols] = full_df[float_cols].astype("float32")
+
     return full_df
 
 
