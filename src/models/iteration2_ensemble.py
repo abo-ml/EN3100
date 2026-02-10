@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import accuracy_score
-from sklearn.model_selection import ParameterGrid
+from sklearn.model_selection import GridSearchCV, ParameterGrid
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 
