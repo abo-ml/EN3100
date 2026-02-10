@@ -126,9 +126,17 @@ def tune_meta_logistic(
                 **params,
             )
             model.fit(X_train, y_train)
-            # Use accuracy on validation fold as the tuning metric
-            accuracy = (model.predict(X_val) == y_val).mean()
-            fold_scores.append(accuracy)
+            y_pred = model.predict(X_val)
+            # Use balanced accuracy for imbalanced class handling
+            # Balanced accuracy = (recall_class0 + recall_class1) / 2
+            tp = np.sum((y_pred == 1) & (y_val == 1))
+            tn = np.sum((y_pred == 0) & (y_val == 0))
+            p = np.sum(y_val == 1)
+            n = np.sum(y_val == 0)
+            recall_pos = tp / p if p > 0 else 0.0
+            recall_neg = tn / n if n > 0 else 0.0
+            balanced_acc = (recall_pos + recall_neg) / 2
+            fold_scores.append(balanced_acc)
 
         mean_score = np.mean(fold_scores)
         if mean_score > best_score:
@@ -142,7 +150,7 @@ def tune_meta_logistic(
                 "random_state": SEED,
             }
 
-    LOGGER.info("Best meta-logistic params: C=%.4f with CV accuracy %.4f", best_params.get("C", 1.0), best_score)
+    LOGGER.info("Best meta-logistic params: C=%.4f with CV balanced accuracy %.4f", best_params.get("C", 1.0), best_score)
     return best_params
 
 
