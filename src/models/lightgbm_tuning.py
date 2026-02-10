@@ -211,9 +211,7 @@ def cross_validate_params(
     }
     full_params = {**base_params, **params}
 
-    # Map feature_fraction to colsample_bytree for LightGBM
-    if "feature_fraction" in full_params:
-        full_params["colsample_bytree"] = full_params.pop("feature_fraction")
+    # LightGBM natively supports feature_fraction, no mapping needed
 
     fold_metrics: List[Dict[str, float]] = []
 
@@ -242,7 +240,16 @@ def cross_validate_params(
         })
 
     if not fold_metrics:
-        return {"rmse_mean": float("inf"), "rmse_std": float("nan")}
+        return {
+            "rmse_mean": float("inf"),
+            "rmse_std": float("nan"),
+            "mae_mean": float("inf"),
+            "mae_std": float("nan"),
+            "r2_mean": float("nan"),
+            "r2_std": float("nan"),
+            "directional_accuracy_mean": float("nan"),
+            "directional_accuracy_std": float("nan"),
+        }
 
     return aggregate_metrics(fold_metrics)
 
@@ -315,7 +322,13 @@ def run_tuning(
     results_df = pd.DataFrame(results)
 
     # Find best parameters based on CV RMSE
-    best_idx = results_df["rmse_mean"].idxmin()
+    # Filter for finite RMSE values first
+    valid_results = results_df[np.isfinite(results_df["rmse_mean"])]
+    if valid_results.empty:
+        LOGGER.error("No valid results obtained. All parameter combinations failed cross-validation.")
+        raise ValueError("Hyperparameter tuning failed: no valid results obtained from cross-validation.")
+
+    best_idx = valid_results["rmse_mean"].idxmin()
     best_result = results_df.loc[best_idx]
     best_params = {
         k: best_result[k]
