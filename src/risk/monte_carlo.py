@@ -97,6 +97,22 @@ def save_report(summary: Dict[str, float], output_path):
     output_path.write_text("\n".join(lines))
 
 
+def save_raw_results(sim_results: Dict[str, np.ndarray], output_path) -> None:
+    """Save raw simulation arrays (final_equity, max_drawdown, sharpe) to CSV.
+
+    This allows downstream visualization scripts to plot true distribution
+    histograms from the raw data rather than scalar summary statistics.
+    """
+    df = pd.DataFrame({
+        "final_equity": sim_results["final_equity"],
+        "max_drawdown": sim_results["max_drawdown"],
+        "sharpe": sim_results["sharpe"],
+    })
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(output_path, index=False)
+    LOGGER.info("Saved raw Monte Carlo results to %s", output_path)
+
+
 def plot_histogram(values: np.ndarray, title: str, filename: str) -> None:
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     fig, ax = plt.subplots(figsize=(8, 4))
@@ -133,6 +149,7 @@ def run_monte_carlo(method: str = "block", n_paths: int = 10_000, block_size: in
     summary = summarise_results(results)
 
     save_report(summary, REPORTS_DIR / "iteration_5_monte_carlo.md")
+    save_raw_results(results, PROCESSED_DIR / "iteration5_monte_carlo_results.csv")
     plot_histogram(results["final_equity"], "Final Equity Distribution", "iteration5_mc_final_equity_hist.png")
     plot_histogram(results["max_drawdown"], "Max Drawdown Distribution", "iteration5_mc_drawdown_hist.png")
     plot_equity_fan(results["sample_equities"], historical_equity, "iteration5_mc_equity_fan.png")
