@@ -74,10 +74,12 @@ def fetch_alpaca_bars(
 
     client = StockHistoricalDataClient(api_key, api_secret)
 
-    start_time = pd.to_datetime(start_date).tz_localize("America/New_York")
+    start_dt = pd.to_datetime(start_date)
+    start_time = start_dt if start_dt.tz else start_dt.tz_localize("America/New_York")
     end_time = None
     if end_date:
-        end_time = pd.to_datetime(end_date).tz_localize("America/New_York")
+        end_dt = pd.to_datetime(end_date)
+        end_time = end_dt if end_dt.tz else end_dt.tz_localize("America/New_York")
 
     request = StockBarsRequest(
         symbol_or_symbols=[ticker],
@@ -207,7 +209,7 @@ def plot_equity_comparison(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
-    print(f"Saved equity curve comparison to {output_path}")
+    LOGGER.info("Saved equity curve comparison to %s", output_path)
 
 
 def parse_args() -> argparse.Namespace:
