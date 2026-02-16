@@ -255,7 +255,6 @@ def main() -> None:
         bars_df = fetch_alpaca_bars(ticker, args.start, args.end)
     except ValueError as e:
         LOGGER.error("Failed to fetch Alpaca data: %s", e)
-        print(f"Error: {e}")
         return
 
     # Compute market equity curve from closing prices
