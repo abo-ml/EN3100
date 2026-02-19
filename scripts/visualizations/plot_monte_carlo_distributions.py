@@ -9,7 +9,7 @@ beyond mean accuracy.
 
 Usage:
     python scripts/visualizations/plot_monte_carlo_distributions.py \
-        --input results/iteration5_monte_carlo_results.csv \
+        --input data/processed/iteration5_monte_carlo_results.csv \
         --output figures/monte_carlo_distributions.png
 """
 from __future__ import annotations
@@ -20,7 +20,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from src.utils import FIGURES_DIR, PROJECT_ROOT
+from src.utils import FIGURES_DIR, PROCESSED_DIR
 
 
 def parse_args() -> argparse.Namespace:
@@ -30,8 +30,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--input",
         type=Path,
-        default=PROJECT_ROOT / "results" / "iteration5_monte_carlo_results.csv",
-        help="Path to Monte Carlo results CSV",
+        default=PROCESSED_DIR / "iteration5_monte_carlo_results.csv",
+        help="Path to Monte Carlo results CSV (raw simulation arrays)",
     )
     parser.add_argument(
         "--output",
